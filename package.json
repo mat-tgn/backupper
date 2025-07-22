@@ -1,0 +1,21 @@
+{
+  "name": "backupper",
+  "version": "1.0.0",
+  "description": "Applicazione GUI per gestire backup di database MySQL",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "cd server && npm run dev",
+    "client": "cd client && PORT=3000 npm start",
+    "build": "cd client && npm run build",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["backup", "mysql", "docker", "gui"],
+  "author": "Backupper Team",
+  "license": "MIT"
+} 
