@@ -47,9 +47,32 @@ const BackupFiles = () => {
     });
   };
 
-  const downloadBackup = (fileName) => {
-    // In un'implementazione reale, qui si scaricherebbe il file
-    toast.success(`Download avviato per: ${fileName}`);
+  const downloadBackup = async (fileName) => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`/api/backups/${encodeURIComponent(fileName)}`, {
+        responseType: 'blob'
+      });
+      
+      // Crea un URL temporaneo per il blob
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      
+      // Pulisci
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success(`Download completato: ${fileName}`);
+    } catch (error) {
+      toast.error('Errore durante il download: ' + (error.response?.data?.message || error.message));
+      console.error('Errore download:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const deleteBackup = async (fileName) => {

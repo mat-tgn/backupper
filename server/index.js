@@ -354,6 +354,28 @@ app.get('/api/backups', (req, res) => {
   }
 });
 
+// Download file di backup
+app.get('/api/backups/:filename', (req, res) => {
+  try {
+    const { filename } = req.params;
+    const filePath = path.join(backupDir, filename);
+    
+    // Verifica che il file esista
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, message: 'File non trovato' });
+    }
+    
+    // Imposta gli header per il download
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/sql');
+    
+    // Invia il file
+    res.sendFile(path.resolve(filePath));
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Elimina file di backup
 app.delete('/api/backups/:filename', (req, res) => {
   try {
