@@ -14,9 +14,12 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
-// Storage per connessioni e backup schedulati
+// Storage per connessioni, backup schedulati e impostazioni
 let connections = [];
 let scheduledBackups = [];
+let settings = {
+  retentionDays: 0 // giorni di conservazione (0 = disabilitata)
+};
 
 // Directory per i backup e dati
 const backupDir = path.join(__dirname, 'backups');
@@ -27,6 +30,7 @@ fs.ensureDirSync(dataDir);
 // File per salvare le connessioni
 const connectionsFile = path.join(dataDir, 'connections.json');
 const scheduledBackupsFile = path.join(dataDir, 'scheduled_backups.json');
+const settingsFile = path.join(dataDir, 'settings.json');
 
 // Carica le connessioni salvate
 function loadConnections() {
@@ -81,9 +85,111 @@ function saveScheduledBackups() {
   }
 }
 
+// Carica le impostazioni
+function loadSettings() {
+  try {
+    if (fs.existsSync(settingsFile)) {
+      const data = fs.readFileSync(settingsFile, 'utf8');
+      settings = { ...settings, ...JSON.parse(data) };
+      console.log(`Impostazioni caricate (retention: ${settings.retentionDays} giorni)`);
+    } else {
+      saveSettings();
+    }
+  } catch (error) {
+    console.error('Errore nel caricamento delle impostazioni:', error);
+  }
+}
+
+// Salva le impostazioni
+function saveSettings() {
+  try {
+    fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+  } catch (error) {
+    console.error('Errore nel salvataggio delle impostazioni:', error);
+  }
+}
+
+// Estrae la data di creazione di un file di backup
+function getBackupCreatedAt(file, stats) {
+  const dateMatch = file.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)/);
+  let createdAt = stats.birthtime;
+
+  if (dateMatch) {
+    const dateStr = dateMatch[1];
+    const year = dateStr.substring(0, 4);
+    const month = dateStr.substring(5, 7);
+    const day = dateStr.substring(8, 10);
+    const hour = dateStr.substring(11, 13);
+    const minute = dateStr.substring(14, 16);
+    const second = dateStr.substring(17, 19);
+    const millisecond = dateStr.substring(20, 23);
+    createdAt = new Date(year, month - 1, day, hour, minute, second, millisecond);
+  } else if (stats.birthtime.getTime() === 0) {
+    createdAt = stats.mtime;
+  }
+
+  return createdAt;
+}
+
+// Elenca i file di backup ordinati dal più recente
+function listBackupFiles() {
+  const files = fs.readdirSync(backupDir);
+  return files
+    .filter(file => file.endsWith('.sql'))
+    .map(file => {
+      const filePath = path.join(backupDir, file);
+      const stats = fs.statSync(filePath);
+      return {
+        name: file,
+        size: stats.size,
+        createdAt: getBackupCreatedAt(file, stats)
+      };
+    })
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+}
+
+// Elimina i backup più vecchi del periodo di retention
+function cleanupExpiredBackups() {
+  const retentionDays = Number(settings.retentionDays);
+  if (!retentionDays || retentionDays <= 0) {
+    return { deleted: 0 };
+  }
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - retentionDays);
+
+  let deleted = 0;
+  const backupFiles = listBackupFiles();
+
+  for (const file of backupFiles) {
+    if (new Date(file.createdAt) < cutoff) {
+      try {
+        fs.unlinkSync(path.join(backupDir, file.name));
+        deleted += 1;
+        console.log(`Backup scaduto eliminato: ${file.name}`);
+      } catch (error) {
+        console.error(`Errore eliminazione backup scaduto ${file.name}:`, error.message);
+      }
+    }
+  }
+
+  if (deleted > 0) {
+    console.log(`Cleanup retention: eliminati ${deleted} backup più vecchi di ${retentionDays} giorni`);
+  }
+
+  return { deleted };
+}
+
 // Carica i dati all'avvio
 loadConnections();
 loadScheduledBackups();
+loadSettings();
+cleanupExpiredBackups();
+
+// Cleanup automatico ogni giorno a mezzanotte
+cron.schedule('0 0 * * *', () => {
+  cleanupExpiredBackups();
+});
 
 // API Routes
 
@@ -310,45 +416,43 @@ app.delete('/api/scheduled-backups/:id', (req, res) => {
   res.json({ success: true });
 });
 
-// Lista file di backup
+// Impostazioni applicazione
+app.get('/api/settings', (req, res) => {
+  res.json(settings);
+});
+
+app.put('/api/settings', (req, res) => {
+  try {
+    const { retentionDays } = req.body;
+
+    if (retentionDays !== undefined) {
+      const days = Number(retentionDays);
+      if (!Number.isInteger(days) || days < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'retentionDays deve essere un intero >= 0 (0 = disabilitata)'
+        });
+      }
+      settings.retentionDays = days;
+    }
+
+    saveSettings();
+    const cleanup = cleanupExpiredBackups();
+
+    res.json({
+      success: true,
+      settings,
+      deletedOnSave: cleanup.deleted
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
+// Lista file di backup (dal più recente)
 app.get('/api/backups', (req, res) => {
   try {
-    const files = fs.readdirSync(backupDir);
-    const backupFiles = files
-      .filter(file => file.endsWith('.sql'))
-      .map(file => {
-        const filePath = path.join(backupDir, file);
-        const stats = fs.statSync(filePath);
-        
-        // Estrai la data dal nome del file se possibile
-        const dateMatch = file.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)/);
-        let createdAt = stats.birthtime;
-        
-        if (dateMatch) {
-          // Converti la data dal nome del file (formato: 2025-07-22T15-23-56-495Z)
-          const dateStr = dateMatch[1];
-          const year = dateStr.substring(0, 4);
-          const month = dateStr.substring(5, 7);
-          const day = dateStr.substring(8, 10);
-          const hour = dateStr.substring(11, 13);
-          const minute = dateStr.substring(14, 16);
-          const second = dateStr.substring(17, 19);
-          const millisecond = dateStr.substring(20, 23);
-          
-          createdAt = new Date(year, month - 1, day, hour, minute, second, millisecond);
-        } else if (stats.birthtime.getTime() === 0) {
-          // Se birthtime non è disponibile, usa mtime
-          createdAt = stats.mtime;
-        }
-        
-        return {
-          name: file,
-          size: stats.size,
-          createdAt: createdAt
-        };
-      });
-    
-    res.json(backupFiles);
+    res.json(listBackupFiles());
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
