@@ -3,10 +3,11 @@ version: '3.8'
 services:
   # Applicazione Backupper
   backupper:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
     ports:
-      - "3000:3000"  # Frontend React
-      - "3001:3001"  # Backend API
+      - "3001:3001"  # App (API + frontend buildato)
     volumes:
       - ./server/backups:/app/server/backups  # Volume per i backup
       - ./server/data:/app/server/data  # Volume per i dati persistenti
@@ -21,38 +22,38 @@ services:
     restart: unless-stopped
 
   # Database MySQL per test
-  mysql:
-    image: mysql:8.0
-    ports:
-      - "3306:3306"
-    environment:
-      - MYSQL_ROOT_PASSWORD=backupper123
-      - MYSQL_DATABASE=test_db
-      - MYSQL_USER=backupper_user
-      - MYSQL_PASSWORD=backupper_pass
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./mysql/init:/docker-entrypoint-initdb.d  # Script di inizializzazione
-    networks:
-      - backupper-network
-    restart: unless-stopped
-    command: --default-authentication-plugin=mysql_native_password
+  # mysql:
+  #   image: mysql:8.0
+  #   ports:
+  #     - "3306:3306"
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=backupper123
+  #     - MYSQL_DATABASE=test_db
+  #     - MYSQL_USER=backupper_user
+  #     - MYSQL_PASSWORD=backupper_pass
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #     - ./mysql/init:/docker-entrypoint-initdb.d  # Script di inizializzazione
+  #   networks:
+  #     - backupper-network
+  #   restart: unless-stopped
+  #   command: --default-authentication-plugin=mysql_native_password
 
   # phpMyAdmin per gestione database (opzionale)
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin
-    ports:
-      - "8080:80"
-    environment:
-      - PMA_HOST=mysql
-      - PMA_PORT=3306
-      - PMA_USER=root
-      - PMA_PASSWORD=backupper123
-    depends_on:
-      - mysql
-    networks:
-      - backupper-network
-    restart: unless-stopped
+  # phpmyadmin:
+  #   image: phpmyadmin/phpmyadmin
+  #   ports:
+  #     - "8080:80"
+  #   environment:
+  #     - PMA_HOST=mysql
+  #     - PMA_PORT=3306
+  #     - PMA_USER=root
+  #     - PMA_PASSWORD=backupper123
+  #   depends_on:
+  #     - mysql
+  #   networks:
+  #     - backupper-network
+  #   restart: unless-stopped
 
 volumes:
   mysql_data:

@@ -1,56 +1,46 @@
 # Dockerfile per produzione
 FROM node:18-alpine AS builder
 
-# Installa mysqldump
-RUN apk add --no-cache mysql-client
-
-# Imposta la directory di lavoro
 WORKDIR /app
 
-# Copia i file di configurazione
-COPY package*.json ./
-COPY server/package*.json ./server/
-COPY client/package*.json ./client/
+# --- Client: dipendenze + build ---
+COPY client/package.json ./client/
+COPY client/package-lock.json* ./client/
+RUN cd client && \
+  if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-# Installa le dipendenze
-RUN npm ci --only=production
-RUN cd server && npm ci --only=production
-RUN cd client && npm ci
-
-# Copia il codice sorgente
-COPY . .
-
-# Build del client per produzione
+COPY client ./client
+# Evita che warning ESLint facciano fallire la build in CI/Docker
+ENV CI=false
 RUN cd client && npm run build
 
-# Immagine di produzione
+# --- Server: solo dipendenze di produzione ---
+COPY server/package.json ./server/
+RUN cd server && npm install --omit=dev
+
+COPY server ./server
+
+# Immagine di produzione (senza sorgenti client né tool di build)
 FROM node:18-alpine AS production
 
-# Installa mysqldump
 RUN apk add --no-cache mysql-client
 
-# Crea utente non-root
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S backupper -u 1001
+RUN addgroup -g 1001 -S nodejs \
+  && adduser -S backupper -u 1001
 
-# Imposta la directory di lavoro
 WORKDIR /app
 
-# Copia le dipendenze e il codice buildato
-COPY --from=builder --chown=backupper:nodejs /app/node_modules ./node_modules
-COPY --from=builder --chown=backupper:nodejs /app/server/node_modules ./server/node_modules
 COPY --from=builder --chown=backupper:nodejs /app/server ./server
 COPY --from=builder --chown=backupper:nodejs /app/client/build ./client/build
-COPY --from=builder --chown=backupper:nodejs /app/package*.json ./
 
-# Crea directory per i backup
-RUN mkdir -p /app/server/backups && chown -R backupper:nodejs /app/server/backups
+RUN mkdir -p /app/server/backups /app/server/data \
+  && chown -R backupper:nodejs /app/server/backups /app/server/data
 
-# Passa all'utente non-root
 USER backupper
 
-# Espone le porte
+ENV NODE_ENV=production
+ENV PORT=3001
+
 EXPOSE 3001
 
-# Comando di avvio
-CMD ["npm", "start"] 
+CMD ["node", "server/index.js"]

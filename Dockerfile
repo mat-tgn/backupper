@@ -20,7 +20,8 @@ RUN cd client && npm install
 # Copia il codice sorgente
 COPY . .
 
-# Build del client
+# Build del client (CI=false: i warning ESLint non bloccano la build)
+ENV CI=false
 RUN cd client && npm run build
 
 # Espone le porte
