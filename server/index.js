@@ -54,12 +54,39 @@ const connectionsFile = path.join(dataDir, 'connections.json');
 const scheduledBackupsFile = path.join(dataDir, 'scheduled_backups.json');
 const settingsFile = path.join(dataDir, 'settings.json');
 
+function normalizeRetentionDays(value, fallback = 0) {
+  const days = Number(value);
+  if (!Number.isInteger(days) || days < 0) {
+    return fallback;
+  }
+  return days;
+}
+
 // Carica le connessioni salvate
 function loadConnections() {
   try {
     if (fs.existsSync(connectionsFile)) {
       const data = fs.readFileSync(connectionsFile, 'utf8');
       connections = JSON.parse(data);
+
+      // Migra retention globale → per connessione (se assente)
+      const globalRetention = normalizeRetentionDays(settings.retentionDays, 0);
+      let migrated = false;
+      connections = connections.map((conn) => {
+        if (conn.retentionDays === undefined) {
+          migrated = true;
+          return { ...conn, retentionDays: globalRetention };
+        }
+        return {
+          ...conn,
+          retentionDays: normalizeRetentionDays(conn.retentionDays, 0)
+        };
+      });
+      if (migrated) {
+        saveConnections();
+        console.log(`Migrata retention (${globalRetention} giorni) sulle connessioni`);
+      }
+
       console.log(`Caricate ${connections.length} connessioni`);
     }
   } catch (error) {
@@ -170,25 +197,45 @@ function listBackupFiles() {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-// Elimina i backup più vecchi del periodo di retention
-function cleanupExpiredBackups() {
-  const retentionDays = Number(settings.retentionDays);
-  if (!retentionDays || retentionDays <= 0) {
-    return { deleted: 0 };
+// Estrae connectionId dal nome file (formato nuovo); null per file legacy
+function getConnectionIdFromBackupName(fileName) {
+  const match = fileName.match(
+    /^(?:scheduled_)?backup_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_/i
+  );
+  return match ? match[1] : null;
+}
+
+// Retention applicabile a un file di backup
+function getRetentionDaysForBackup(fileName) {
+  const connectionId = getConnectionIdFromBackupName(fileName);
+  if (connectionId) {
+    const connection = connections.find((c) => c.id === connectionId);
+    return normalizeRetentionDays(connection?.retentionDays, 0);
   }
+  // File legacy senza connectionId: fallback alle impostazioni globali
+  return normalizeRetentionDays(settings.retentionDays, 0);
+}
 
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - retentionDays);
-
+// Elimina i backup più vecchi del periodo di retention (per connessione)
+function cleanupExpiredBackups() {
   let deleted = 0;
+  const now = new Date();
   const backupFiles = listBackupFiles();
 
   for (const file of backupFiles) {
+    const retentionDays = getRetentionDaysForBackup(file.name);
+    if (!retentionDays || retentionDays <= 0) {
+      continue;
+    }
+
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - retentionDays);
+
     if (new Date(file.createdAt) < cutoff) {
       try {
         fs.unlinkSync(path.join(backupDir, file.name));
         deleted += 1;
-        console.log(`Backup scaduto eliminato: ${file.name}`);
+        console.log(`Backup scaduto eliminato: ${file.name} (retention ${retentionDays}g)`);
       } catch (error) {
         console.error(`Errore eliminazione backup scaduto ${file.name}:`, error.message);
       }
@@ -196,16 +243,16 @@ function cleanupExpiredBackups() {
   }
 
   if (deleted > 0) {
-    console.log(`Cleanup retention: eliminati ${deleted} backup più vecchi di ${retentionDays} giorni`);
+    console.log(`Cleanup retention: eliminati ${deleted} backup scaduti`);
   }
 
   return { deleted };
 }
 
-// Carica i dati all'avvio
+// Carica i dati all'avvio (settings prima, per migrare retention sulle connessioni)
+loadSettings();
 loadConnections();
 loadScheduledBackups();
-loadSettings();
 cleanupExpiredBackups();
 
 // Cleanup automatico ogni giorno a mezzanotte
@@ -265,9 +312,20 @@ app.post('/api/discover-databases', async (req, res) => {
 // Salva connessione
 app.post('/api/connections', (req, res) => {
   try {
+    if (req.body.retentionDays !== undefined) {
+      const days = Number(req.body.retentionDays);
+      if (!Number.isInteger(days) || days < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'retentionDays deve essere un intero >= 0 (0 = disabilitata)'
+        });
+      }
+    }
+
     const connection = {
       id: uuidv4(),
       ...req.body,
+      retentionDays: normalizeRetentionDays(req.body.retentionDays, 0),
       createdAt: new Date().toISOString()
     };
     
@@ -301,16 +359,37 @@ app.put('/api/connections/:id', (req, res) => {
     if (connectionIndex === -1) {
       return res.status(404).json({ success: false, message: 'Connessione non trovata' });
     }
+
+    if (req.body.retentionDays !== undefined) {
+      const days = Number(req.body.retentionDays);
+      if (!Number.isInteger(days) || days < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'retentionDays deve essere un intero >= 0 (0 = disabilitata)'
+        });
+      }
+    }
     
     // Aggiorna la connessione mantenendo l'ID e la data di creazione
     connections[connectionIndex] = {
       ...connections[connectionIndex],
       ...req.body,
+      retentionDays: normalizeRetentionDays(
+        req.body.retentionDays !== undefined
+          ? req.body.retentionDays
+          : connections[connectionIndex].retentionDays,
+        0
+      ),
       updatedAt: new Date().toISOString()
     };
     
     saveConnections(); // Salva automaticamente
-    res.json({ success: true, connection: connections[connectionIndex] });
+    const cleanup = cleanupExpiredBackups();
+    res.json({
+      success: true,
+      connection: connections[connectionIndex],
+      deletedOnSave: cleanup.deleted
+    });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
   }
@@ -421,7 +500,7 @@ app.post('/api/backup', async (req, res) => {
     await mysqlConnection.end();
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFileName = `backup_${database}_${timestamp}.sql`;
+    const backupFileName = `backup_${connectionId}_${database}_${timestamp}.sql`;
     const backupPath = path.join(backupDir, backupFileName);
 
     const result = await runDatabaseDump(connection, database, backupPath);
@@ -591,7 +670,7 @@ function scheduleBackup(scheduledBackup) {
   cron.schedule(scheduledBackup.schedule, async () => {
     try {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const backupFileName = `scheduled_backup_${scheduledBackup.database}_${timestamp}.sql`;
+      const backupFileName = `scheduled_backup_${scheduledBackup.connectionId}_${scheduledBackup.database}_${timestamp}.sql`;
       const backupPath = path.join(backupDir, backupFileName);
 
       log('INFO', 'Avvio backup schedulato', {

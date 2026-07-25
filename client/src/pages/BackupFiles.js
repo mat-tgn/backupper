@@ -6,9 +6,7 @@ import {
   Calendar,
   HardDrive,
   Filter,
-  X,
-  Save,
-  Shield
+  X
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
@@ -18,12 +16,9 @@ const BackupFiles = () => {
   const [loading, setLoading] = useState(false);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [retentionDays, setRetentionDays] = useState(0);
-  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     fetchBackupFiles();
-    fetchSettings();
   }, []);
 
   const fetchBackupFiles = async () => {
@@ -35,46 +30,6 @@ const BackupFiles = () => {
       toast.error('Errore nel caricamento dei file di backup');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchSettings = async () => {
-    try {
-      const response = await axios.get('/api/settings');
-      setRetentionDays(response.data.retentionDays ?? 0);
-    } catch (error) {
-      console.error('Errore nel caricamento impostazioni:', error);
-    }
-  };
-
-  const saveRetention = async () => {
-    const days = Number(retentionDays);
-    if (!Number.isInteger(days) || days < 0) {
-      toast.error('Inserisci un numero intero di giorni (>= 0)');
-      return;
-    }
-
-    try {
-      setSavingSettings(true);
-      const response = await axios.put('/api/settings', { retentionDays: days });
-      setRetentionDays(response.data.settings.retentionDays);
-
-      if (response.data.deletedOnSave > 0) {
-        toast.success(
-          `Impostazioni salvate. Eliminati ${response.data.deletedOnSave} backup scaduti.`
-        );
-        await fetchBackupFiles();
-      } else {
-        toast.success(
-          days === 0
-            ? 'Retention disabilitata: i backup non verranno eliminati automaticamente'
-            : `I backup verranno conservati per ${days} giorni`
-        );
-      }
-    } catch (error) {
-      toast.error('Errore nel salvataggio: ' + (error.response?.data?.message || error.message));
-    } finally {
-      setSavingSettings(false);
     }
   };
 
@@ -228,51 +183,6 @@ const BackupFiles = () => {
                 {formatFileSize(totalSize)}
               </p>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Retention */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center space-x-2">
-            <Shield className="h-5 w-5 text-gray-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Conservazione automatica</h2>
-          </div>
-        </div>
-        <div className="p-6">
-          <p className="text-sm text-gray-600 mb-4">
-            Imposta per quanti giorni tenere i backup prima di eliminarli automaticamente.
-            Usa <span className="font-medium">0</span> per disabilitare la cancellazione automatica.
-          </p>
-          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-            <div>
-              <label htmlFor="retentionDays" className="block text-sm font-medium text-gray-700 mb-1">
-                Giorni di conservazione
-              </label>
-              <input
-                id="retentionDays"
-                type="number"
-                min="0"
-                step="1"
-                value={retentionDays}
-                onChange={(e) => setRetentionDays(e.target.value === '' ? '' : Number(e.target.value))}
-                className="w-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              />
-            </div>
-            <button
-              onClick={saveRetention}
-              disabled={savingSettings}
-              className="inline-flex items-center justify-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              <span>{savingSettings ? 'Salvataggio...' : 'Salva'}</span>
-            </button>
-            <p className="text-sm text-gray-500 sm:pb-2">
-              {Number(retentionDays) === 0
-                ? 'Retention disabilitata'
-                : `I file più vecchi di ${retentionDays} giorni verranno eliminati`}
-            </p>
           </div>
         </div>
       </div>
@@ -438,8 +348,8 @@ const BackupFiles = () => {
               <h3 className="text-md font-semibold text-gray-900 mb-2">Formato File</h3>
               <ul className="space-y-2 text-sm text-gray-600">
                 <li>• I backup sono salvati in formato SQL</li>
-                <li>• Nome file: backup_[database]_[timestamp].sql</li>
-                <li>• I file contengono la struttura e i dati del database</li>
+                <li>• Nome file: backup_[connessione]_[database]_[timestamp].sql</li>
+                <li>• La conservazione automatica si configura per ogni connessione</li>
                 <li>• Compatibili con MySQL e MariaDB</li>
               </ul>
             </div>
