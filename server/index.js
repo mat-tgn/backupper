@@ -4,6 +4,7 @@ const mysql = require('mysql2/promise');
 const cron = require('node-cron');
 const fs = require('fs-extra');
 const path = require('path');
+const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
 
@@ -21,11 +22,32 @@ let settings = {
   retentionDays: 0 // giorni di conservazione (0 = disabilitata)
 };
 
-// Directory per i backup e dati
+// Directory per i backup, dati e log
 const backupDir = path.join(__dirname, 'backups');
 const dataDir = path.join(__dirname, 'data');
+const logsDir = path.join(__dirname, '..', 'logs');
+const logFile = path.join(logsDir, 'backupper.log');
 fs.ensureDirSync(backupDir);
 fs.ensureDirSync(dataDir);
+fs.ensureDirSync(logsDir);
+
+function log(level, message, details) {
+  const ts = new Date().toISOString();
+  const detailStr = details !== undefined
+    ? ` ${typeof details === 'string' ? details : JSON.stringify(details)}`
+    : '';
+  const line = `[${ts}] [${level}] ${message}${detailStr}`;
+  if (level === 'ERROR') {
+    console.error(line);
+  } else {
+    console.log(line);
+  }
+  try {
+    fs.appendFileSync(logFile, line + '\n');
+  } catch (err) {
+    console.error('Impossibile scrivere sul file di log:', err.message);
+  }
+}
 
 // File per salvare le connessioni
 const connectionsFile = path.join(dataDir, 'connections.json');
@@ -294,66 +316,124 @@ app.put('/api/connections/:id', (req, res) => {
   }
 });
 
+// Esegue mysqldump/mariadb-dump senza shell (password con caratteri speciali sicure)
+function runDumpCommand(bin, connection, database, backupPath) {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '--skip-ssl',
+      '-h', String(connection.host),
+      '-P', String(connection.port || 3306),
+      '-u', String(connection.user),
+      `-p${connection.password || ''}`,
+      '--single-transaction',
+      '--routines',
+      '--triggers',
+      String(database)
+    ];
+
+    log('INFO', `Avvio dump con ${bin}`, {
+      host: connection.host,
+      port: connection.port || 3306,
+      user: connection.user,
+      database,
+      backupPath
+    });
+
+    const out = fs.createWriteStream(backupPath);
+    const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    let stderr = '';
+
+    child.stdout.pipe(out);
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (err) => {
+      out.destroy();
+      reject(new Error(`${bin} non disponibile: ${err.message}`));
+    });
+
+    child.on('close', (code) => {
+      out.end(() => {
+        if (code === 0) {
+          const size = fs.existsSync(backupPath) ? fs.statSync(backupPath).size : 0;
+          log('INFO', `Dump completato con ${bin}`, { backupPath, size });
+          resolve({ bin, stderr: stderr.trim() });
+          return;
+        }
+        try {
+          if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
+        } catch (_) { /* ignore */ }
+        const detail = stderr.trim() || `exit code ${code}`;
+        reject(new Error(`${bin} fallito: ${detail}`));
+      });
+    });
+  });
+}
+
+async function runDatabaseDump(connection, database, backupPath) {
+  const bins = ['mysqldump', 'mariadb-dump'];
+  const errors = [];
+
+  for (const bin of bins) {
+    try {
+      return await runDumpCommand(bin, connection, database, backupPath);
+    } catch (err) {
+      log('WARN', err.message);
+      errors.push(err.message);
+    }
+  }
+
+  const message = errors.join(' | ');
+  log('ERROR', 'Backup fallito', { database, message });
+  throw new Error(message);
+}
+
 // Backup manuale
 app.post('/api/backup', async (req, res) => {
   try {
     const { connectionId, database } = req.body;
     const connection = connections.find(c => c.id === connectionId);
-    
+
     if (!connection) {
       return res.status(404).json({ success: false, message: 'Connessione non trovata' });
     }
-    
+
+    if (!database) {
+      return res.status(400).json({ success: false, message: 'Database non specificato' });
+    }
+
+    log('INFO', 'Richiesta backup manuale', {
+      connectionId,
+      host: connection.host,
+      database
+    });
+
+    // Verifica connettività prima del dump
     const mysqlConnection = await mysql.createConnection({
       host: connection.host,
       port: parseInt(connection.port) || 3306,
       user: connection.user,
       password: connection.password,
-      database: database || connection.database
+      database
     });
-    
+    await mysqlConnection.ping();
+    await mysqlConnection.end();
+
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupFileName = `backup_${database}_${timestamp}.sql`;
     const backupPath = path.join(backupDir, backupFileName);
-    
-    // Esegui backup usando il comando appropriato (mysqldump o mariadb-dump)
-    const { exec } = require('child_process');
-    
-    // Prova prima mysqldump, se fallisce usa mariadb-dump
-    const tryMysqldump = () => {
-      const mysqldumpCmd = `mysqldump --skip-ssl -h ${connection.host} -P ${connection.port} -u ${connection.user} -p${connection.password} ${database} > ${backupPath}`;
-      
-      exec(mysqldumpCmd, (error, stdout, stderr) => {
-        if (error) {
-          console.log('mysqldump fallito, provo mariadb-dump...');
-          // Se mysqldump fallisce, prova mariadb-dump
-          const mariadbDumpCmd = `mariadb-dump --skip-ssl -h ${connection.host} -P ${connection.port} -u ${connection.user} -p${connection.password} ${database} > ${backupPath}`;
-          
-          exec(mariadbDumpCmd, (mariadbError, mariadbStdout, mariadbStderr) => {
-            if (mariadbError) {
-              console.error('Errore backup:', mariadbError);
-              return res.status(500).json({ success: false, message: 'Errore durante il backup' });
-            }
-            
-            res.json({
-              success: true,
-              message: 'Backup completato con successo',
-              backupFile: backupFileName
-            });
-          });
-        } else {
-          res.json({
-            success: true,
-            message: 'Backup completato con successo',
-            backupFile: backupFileName
-          });
-        }
-      });
-    };
-    
-    tryMysqldump();
-    
+
+    const result = await runDatabaseDump(connection, database, backupPath);
+
+    res.json({
+      success: true,
+      message: 'Backup completato con successo',
+      backupFile: backupFileName,
+      tool: result.bin
+    });
   } catch (error) {
+    log('ERROR', 'Errore backup manuale', error.message);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -503,43 +583,34 @@ app.delete('/api/backups/:filename', (req, res) => {
 // Funzione per schedulare backup
 function scheduleBackup(scheduledBackup) {
   const connection = connections.find(c => c.id === scheduledBackup.connectionId);
-  if (!connection) return;
-  
+  if (!connection) {
+    log('WARN', 'Schedule saltato: connessione non trovata', scheduledBackup.connectionId);
+    return;
+  }
+
   cron.schedule(scheduledBackup.schedule, async () => {
     try {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupFileName = `scheduled_backup_${scheduledBackup.database}_${timestamp}.sql`;
       const backupPath = path.join(backupDir, backupFileName);
-      
-            const { exec } = require('child_process');
-      
-      // Prova prima mysqldump, se fallisce usa mariadb-dump
-      const tryMysqldump = () => {
-        const mysqldumpCmd = `mysqldump --skip-ssl -h ${connection.host} -P ${connection.port} -u ${connection.user} -p${connection.password} ${scheduledBackup.database} > ${backupPath}`;
-        
-        exec(mysqldumpCmd, (error, stdout, stderr) => {
-          if (error) {
-            console.log('mysqldump fallito, provo mariadb-dump...');
-            // Se mysqldump fallisce, prova mariadb-dump
-            const mariadbDumpCmd = `mariadb-dump --skip-ssl -h ${connection.host} -P ${connection.port} -u ${connection.user} -p${connection.password} ${scheduledBackup.database} > ${backupPath}`;
-            
-            exec(mariadbDumpCmd, (mariadbError, mariadbStdout, mariadbStderr) => {
-              if (mariadbError) {
-                console.error('Errore backup schedulato:', mariadbError);
-              } else {
-                console.log(`Backup schedulato completato: ${backupFileName}`);
-              }
-            });
-          } else {
-            console.log(`Backup schedulato completato: ${backupFileName}`);
-          }
-        });
-      };
-      
-      tryMysqldump();
+
+      log('INFO', 'Avvio backup schedulato', {
+        id: scheduledBackup.id,
+        database: scheduledBackup.database,
+        schedule: scheduledBackup.schedule
+      });
+
+      await runDatabaseDump(connection, scheduledBackup.database, backupPath);
+      log('INFO', `Backup schedulato completato: ${backupFileName}`);
     } catch (error) {
-      console.error('Errore backup schedulato:', error);
+      log('ERROR', 'Errore backup schedulato', error.message);
     }
+  });
+
+  log('INFO', 'Backup schedulato attivato', {
+    id: scheduledBackup.id,
+    schedule: scheduledBackup.schedule,
+    database: scheduledBackup.database
   });
 }
 
@@ -553,5 +624,6 @@ app.get('*', (req, res) => {
 
 // Avvia server
 app.listen(PORT, () => {
-  console.log(`Server Backupper avviato sulla porta ${PORT}`);
+  log('INFO', `Server Backupper avviato sulla porta ${PORT}`);
+  log('INFO', `File di log: ${logFile}`);
 }); 

@@ -192,7 +192,7 @@ const Connections = () => {
       });
       toast.success('Backup completato con successo!');
     } catch (error) {
-      toast.error('Errore durante il backup: ' + error.response?.data?.message || error.message);
+      toast.error('Errore durante il backup: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
@@ -221,7 +221,7 @@ const Connections = () => {
       setSelectedConnection(null);
       setSelectedDatabases([]);
     } catch (error) {
-      toast.error('Errore durante il backup: ' + error.response?.data?.message || error.message);
+      toast.error('Errore durante il backup: ' + (error.response?.data?.message || error.message));
     } finally {
       setLoading(false);
     }
