@@ -12,16 +12,16 @@ README.md
 .env.*
 
 # Artifact e cache
-client/build
-client/dist
+frontend/build
+frontend/dist
 coverage
 .nyc_output
 .cache
 .eslintcache
 
 # Runtime / volumi (non servono in build)
-server/backups
-server/data
+backend/backups
+backend/data
 logs
 .app-version.json
 *.log

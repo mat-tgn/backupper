@@ -2,12 +2,12 @@
   "name": "backupper",
   "version": "1.0.0",
   "description": "Applicazione GUI per gestire backup di database MySQL",
-  "main": "server/index.js",
+  "main": "backend/index.js",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd server && npm run dev",
-    "client": "cd client && PORT=3000 npm start",
-    "build": "cd client && npm run build",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && PORT=3000 npm start",
+    "build": "cd frontend && npm run build",
     "docker:build": "docker-compose build",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down"

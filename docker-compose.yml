@@ -9,8 +9,8 @@ services:
     ports:
       - "3001:3001"  # App (API + frontend buildato)
     volumes:
-      - ./server/backups:/app/server/backups  # Volume per i backup
-      - ./server/data:/app/server/data  # Volume per i dati persistenti
+      - ./backend/backups:/app/backend/backups  # Volume per i backup
+      - ./backend/data:/app/backend/data  # Volume per i dati persistenti
       - ./logs:/app/logs  # Volume per i log
     environment:
       - NODE_ENV=production

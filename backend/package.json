@@ -1,5 +1,5 @@
 {
-  "name": "backupper-server",
+  "name": "backupper-backend",
   "version": "1.0.0",
   "description": "Backend per l'applicazione Backupper",
   "main": "index.js",

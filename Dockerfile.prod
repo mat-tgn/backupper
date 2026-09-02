@@ -3,24 +3,24 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# --- Client: dipendenze + build ---
-COPY client/package.json ./client/
-COPY client/package-lock.json* ./client/
-RUN cd client && \
-  if [ -f package-lock.json ]; then npm ci; else npm install; fi
+# --- Frontend: dipendenze + build ---
+COPY frontend/package.json ./frontend/
+COPY frontend/package-lock.json* ./frontend/
+# npm install: il lockfile può non essere allineato con npm 10 (Node 18) nel container
+RUN cd frontend && npm install
 
-COPY client ./client
+COPY frontend ./frontend
 # Evita che warning ESLint facciano fallire la build in CI/Docker
 ENV CI=false
-RUN cd client && npm run build
+RUN cd frontend && npm run build
 
-# --- Server: solo dipendenze di produzione ---
-COPY server/package.json ./server/
-RUN cd server && npm install --omit=dev
+# --- Backend: solo dipendenze di produzione ---
+COPY backend/package.json ./backend/
+RUN cd backend && npm install --omit=dev
 
-COPY server ./server
+COPY backend ./backend
 
-# Immagine di produzione (senza sorgenti client né tool di build)
+# Immagine di produzione (senza sorgenti frontend né tool di build)
 FROM node:18-alpine AS production
 
 # curl/tar: download aggiornamenti; python/make/g++: npm install in-container
@@ -31,10 +31,10 @@ RUN addgroup -g 1001 -S nodejs \
 
 WORKDIR /app
 
-COPY --from=builder --chown=backupper:nodejs /app/server ./server
-COPY --from=builder --chown=backupper:nodejs /app/client/build ./client/build
+COPY --from=builder --chown=backupper:nodejs /app/backend ./backend
+COPY --from=builder --chown=backupper:nodejs /app/frontend/build ./frontend/build
 
-RUN mkdir -p /app/server/backups /app/server/data /app/logs /app/client \
+RUN mkdir -p /app/backend/backups /app/backend/data /app/logs /app/frontend \
   && chown -R backupper:nodejs /app
 
 USER backupper
@@ -44,4 +44,4 @@ ENV PORT=3001
 
 EXPOSE 3001
 
-CMD ["node", "server/index.js"]
+CMD ["node", "backend/index.js"]

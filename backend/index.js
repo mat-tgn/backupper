@@ -810,20 +810,20 @@ function scheduleBackup(scheduledBackup) {
   });
 }
 
-// Servi i file statici del client React (solo se è stata fatta la build)
-const clientBuildDir = path.join(__dirname, '../client/build');
-const clientIndex = path.join(clientBuildDir, 'index.html');
+// Servi i file statici del frontend React (solo se è stata fatta la build)
+const frontendBuildDir = path.join(__dirname, '../frontend/build');
+const frontendIndex = path.join(frontendBuildDir, 'index.html');
 
-if (fs.existsSync(clientIndex)) {
-  app.use(express.static(clientBuildDir));
+if (fs.existsSync(frontendIndex)) {
+  app.use(express.static(frontendBuildDir));
   app.get('*', (req, res) => {
-    res.sendFile(clientIndex);
+    res.sendFile(frontendIndex);
   });
 } else {
   app.get('*', (req, res) => {
     res.status(503).type('text').send(
       'Frontend non compilato. In sviluppo apri http://localhost:3000 (npm run dev) ' +
-      'oppure genera la build con: cd client && npm run build'
+      'oppure genera la build con: cd frontend && npm run build'
     );
   });
 }

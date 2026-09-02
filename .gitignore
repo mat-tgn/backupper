@@ -5,8 +5,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Production builds
-client/build/
-client/dist/
+frontend/build/
+frontend/dist/
 
 # Environment variables
 .env
@@ -99,14 +99,14 @@ ehthumbs.db
 Thumbs.db
 
 # Backup files
-server/backups/
+backend/backups/
 *.sql
 
 # Docker volumes
 mysql_data/
 
 # Application data
-server/data/
+backend/data/
 
 # Revisione applicata dall'auto-aggiornamento in-container
 .app-version.json 

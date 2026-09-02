@@ -152,27 +152,27 @@ async function findExtractedRoot(extractDir) {
 }
 
 async function replaceAppFromBuild(sourceRoot) {
-  const clientBuildSrc = path.join(sourceRoot, 'client', 'build');
-  const serverSrc = path.join(sourceRoot, 'server');
-  const clientBuildDest = path.join(APP_ROOT, 'client', 'build');
-  const serverDest = path.join(APP_ROOT, 'server');
+  const frontendBuildSrc = path.join(sourceRoot, 'frontend', 'build');
+  const backendSrc = path.join(sourceRoot, 'backend');
+  const frontendBuildDest = path.join(APP_ROOT, 'frontend', 'build');
+  const backendDest = path.join(APP_ROOT, 'backend');
 
-  if (!fs.existsSync(clientBuildSrc)) {
-    throw new Error('Build del client non trovata dopo la compilazione');
+  if (!fs.existsSync(frontendBuildSrc)) {
+    throw new Error('Build del frontend non trovata dopo la compilazione');
   }
 
-  await fs.ensureDir(path.join(APP_ROOT, 'client'));
-  await fs.emptyDir(clientBuildDest);
-  await fs.copy(clientBuildSrc, clientBuildDest);
+  await fs.ensureDir(path.join(APP_ROOT, 'frontend'));
+  await fs.emptyDir(frontendBuildDest);
+  await fs.copy(frontendBuildSrc, frontendBuildDest);
 
   const skip = new Set(['data', 'backups']);
-  const entries = await fs.readdir(serverSrc);
+  const entries = await fs.readdir(backendSrc);
   for (const entry of entries) {
     if (skip.has(entry)) {
       continue;
     }
-    const from = path.join(serverSrc, entry);
-    const to = path.join(serverDest, entry);
+    const from = path.join(backendSrc, entry);
+    const to = path.join(backendDest, entry);
     await fs.remove(to);
     await fs.copy(from, to);
   }
@@ -228,26 +228,26 @@ async function applyUpdate() {
     await runCommand('tar', ['-xzf', tarPath, '-C', extractDir], { timeout: 120000 });
     const sourceRoot = await findExtractedRoot(extractDir);
 
-    const clientDir = path.join(sourceRoot, 'client');
-    const serverDir = path.join(sourceRoot, 'server');
+    const frontendDir = path.join(sourceRoot, 'frontend');
+    const backendDir = path.join(sourceRoot, 'backend');
 
-    setStatus({ message: 'Installazione dipendenze client…' });
+    setStatus({ message: 'Installazione dipendenze frontend…' });
     await runCommand('npm', ['install'], {
-      cwd: clientDir,
+      cwd: frontendDir,
       timeout: 600000,
       env: { CI: 'false' }
     });
 
     setStatus({ message: 'Build del frontend…' });
     await runCommand('npm', ['run', 'build'], {
-      cwd: clientDir,
+      cwd: frontendDir,
       timeout: 600000,
       env: { CI: 'false', NODE_ENV: 'production' }
     });
 
-    setStatus({ message: 'Installazione dipendenze server…' });
+    setStatus({ message: 'Installazione dipendenze backend…' });
     await runCommand('npm', ['install', '--omit=dev'], {
-      cwd: serverDir,
+      cwd: backendDir,
       timeout: 600000
     });
 
@@ -257,7 +257,7 @@ async function applyUpdate() {
     let nextVersion = localPackage.version;
     try {
       const pkg = JSON.parse(
-        fs.readFileSync(path.join(sourceRoot, 'server', 'package.json'), 'utf8')
+        fs.readFileSync(path.join(sourceRoot, 'backend', 'package.json'), 'utf8')
       );
       if (pkg.version) {
         nextVersion = pkg.version;

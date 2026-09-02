@@ -9,20 +9,20 @@ WORKDIR /app
 
 # Copia i file di configurazione
 COPY package*.json ./
-COPY server/package*.json ./server/
-COPY client/package*.json ./client/
+COPY backend/package*.json ./backend/
+COPY frontend/package*.json ./frontend/
 
 # Installa le dipendenze
 RUN npm install
-RUN cd server && npm install
-RUN cd client && npm install
+RUN cd backend && npm install
+RUN cd frontend && npm install
 
 # Copia il codice sorgente
 COPY . .
 
-# Build del client (CI=false: i warning ESLint non bloccano la build)
+# Build del frontend (CI=false: i warning ESLint non bloccano la build)
 ENV CI=false
-RUN cd client && npm run build
+RUN cd frontend && npm run build
 
 # Espone le porte
 EXPOSE 3001 3000

@@ -42,8 +42,8 @@ Un'applicazione web moderna per gestire backup di database MySQL con interfaccia
 1. **Installa le dipendenze**:
    ```bash
    npm install
-   cd server && npm install
-   cd ../client && npm install
+   cd backend && npm install
+   cd ../frontend && npm install
    ```
 
 2. **Avvia il server di sviluppo**:
@@ -114,7 +114,7 @@ MYSQL_DATABASE=test_db
 
 ### Volumi Docker
 
-I backup sono salvati nel volume `./server/backups` che viene montato nel container.
+I backup sono salvati nel volume `./backend/backups` che viene montato nel container.
 
 ### Rete Docker
 
@@ -126,13 +126,13 @@ L'applicazione utilizza una rete Docker dedicata per la comunicazione tra serviz
 
 ```
 backupper/
-├── client/                 # Frontend React
+├── frontend/              # Frontend React
 │   ├── src/
 │   │   ├── components/    # Componenti React
 │   │   ├── pages/        # Pagine dell'applicazione
 │   │   └── App.js        # Componente principale
 │   └── package.json
-├── server/                # Backend Node.js
+├── backend/               # Backend Node.js
 │   ├── index.js          # Server Express
 │   ├── backups/          # Directory backup
 │   └── package.json
@@ -145,9 +145,9 @@ backupper/
 
 ```bash
 # Sviluppo
-npm run dev              # Avvia server e client
-npm run server           # Solo server backend
-npm run client           # Solo client frontend
+npm run dev              # Avvia backend e frontend
+npm run backend          # Solo backend
+npm run frontend         # Solo frontend
 
 # Docker
 npm run docker:build     # Build immagine Docker
