@@ -68,25 +68,6 @@ function loadConnections() {
     if (fs.existsSync(connectionsFile)) {
       const data = fs.readFileSync(connectionsFile, 'utf8');
       connections = JSON.parse(data);
-
-      // Migra retention globale → per connessione (se assente)
-      const globalRetention = normalizeRetentionDays(settings.retentionDays, 0);
-      let migrated = false;
-      connections = connections.map((conn) => {
-        if (conn.retentionDays === undefined) {
-          migrated = true;
-          return { ...conn, retentionDays: globalRetention };
-        }
-        return {
-          ...conn,
-          retentionDays: normalizeRetentionDays(conn.retentionDays, 0)
-        };
-      });
-      if (migrated) {
-        saveConnections();
-        console.log(`Migrata retention (${globalRetention} giorni) sulle connessioni`);
-      }
-
       console.log(`Caricate ${connections.length} connessioni`);
     }
   } catch (error) {
@@ -110,6 +91,32 @@ function loadScheduledBackups() {
     if (fs.existsSync(scheduledBackupsFile)) {
       const data = fs.readFileSync(scheduledBackupsFile, 'utf8');
       scheduledBackups = JSON.parse(data);
+
+      // Migra retention da connessione/globale → per operazione schedulata
+      const globalRetention = normalizeRetentionDays(settings.retentionDays, 0);
+      let migrated = false;
+      scheduledBackups = scheduledBackups.map((job) => {
+        if (job.retentionDays === undefined) {
+          const connection = connections.find((c) => c.id === job.connectionId);
+          migrated = true;
+          return {
+            ...job,
+            retentionDays: normalizeRetentionDays(
+              connection?.retentionDays,
+              globalRetention
+            )
+          };
+        }
+        return {
+          ...job,
+          retentionDays: normalizeRetentionDays(job.retentionDays, 0)
+        };
+      });
+      if (migrated) {
+        saveScheduledBackups();
+        console.log('Migrata retention sulle operazioni schedulate');
+      }
+
       console.log(`Caricati ${scheduledBackups.length} backup schedulati`);
       
       // Riattiva i backup schedulati
@@ -197,26 +204,43 @@ function listBackupFiles() {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 }
 
-// Estrae connectionId dal nome file (formato nuovo); null per file legacy
-function getConnectionIdFromBackupName(fileName) {
-  const match = fileName.match(
-    /^(?:scheduled_)?backup_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_/i
-  );
-  return match ? match[1] : null;
-}
+const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const BACKUP_TS_RE = '\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z';
 
-// Retention applicabile a un file di backup
+// Retention applicabile a un file di backup (solo operazioni schedulate)
 function getRetentionDaysForBackup(fileName) {
-  const connectionId = getConnectionIdFromBackupName(fileName);
-  if (connectionId) {
-    const connection = connections.find((c) => c.id === connectionId);
-    return normalizeRetentionDays(connection?.retentionDays, 0);
+  const withJobId = fileName.match(
+    new RegExp(`^scheduled_backup_(${UUID_RE})_(${UUID_RE})_.+_${BACKUP_TS_RE}\\.sql$`, 'i')
+  );
+  if (withJobId) {
+    const job = scheduledBackups.find((j) => j.id === withJobId[1]);
+    if (job) {
+      return normalizeRetentionDays(job.retentionDays, 0);
+    }
   }
-  // File legacy senza connectionId: fallback alle impostazioni globali
-  return normalizeRetentionDays(settings.retentionDays, 0);
+
+  const legacyScheduled = fileName.match(
+    new RegExp(`^scheduled_backup_(${UUID_RE})_(.+)_(${BACKUP_TS_RE})\\.sql$`, 'i')
+  );
+  if (legacyScheduled) {
+    const connectionId = legacyScheduled[1];
+    const database = legacyScheduled[2];
+    const matchingJobs = scheduledBackups.filter(
+      (j) => j.connectionId === connectionId && j.database === database
+    );
+    if (matchingJobs.length === 0) {
+      return 0;
+    }
+    return Math.max(
+      ...matchingJobs.map((j) => normalizeRetentionDays(j.retentionDays, 0))
+    );
+  }
+
+  // Backup manuali e file non riconducibili a un'operazione: nessuna retention automatica
+  return 0;
 }
 
-// Elimina i backup più vecchi del periodo di retention (per connessione)
+// Elimina i backup schedulati più vecchi del periodo di retention dell'operazione
 function cleanupExpiredBackups() {
   let deleted = 0;
   const now = new Date();
@@ -249,7 +273,7 @@ function cleanupExpiredBackups() {
   return { deleted };
 }
 
-// Carica i dati all'avvio (settings prima, per migrare retention sulle connessioni)
+// Carica i dati all'avvio (settings e connessioni prima, per migrare retention sui job)
 loadSettings();
 loadConnections();
 loadScheduledBackups();
@@ -312,20 +336,10 @@ app.post('/api/discover-databases', async (req, res) => {
 // Salva connessione
 app.post('/api/connections', (req, res) => {
   try {
-    if (req.body.retentionDays !== undefined) {
-      const days = Number(req.body.retentionDays);
-      if (!Number.isInteger(days) || days < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'retentionDays deve essere un intero >= 0 (0 = disabilitata)'
-        });
-      }
-    }
-
+    const { retentionDays: _ignoredRetention, ...connectionFields } = req.body;
     const connection = {
       id: uuidv4(),
-      ...req.body,
-      retentionDays: normalizeRetentionDays(req.body.retentionDays, 0),
+      ...connectionFields,
       createdAt: new Date().toISOString()
     };
     
@@ -360,35 +374,19 @@ app.put('/api/connections/:id', (req, res) => {
       return res.status(404).json({ success: false, message: 'Connessione non trovata' });
     }
 
-    if (req.body.retentionDays !== undefined) {
-      const days = Number(req.body.retentionDays);
-      if (!Number.isInteger(days) || days < 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'retentionDays deve essere un intero >= 0 (0 = disabilitata)'
-        });
-      }
-    }
-    
+    const { retentionDays: _ignoredRetentionUpdate, ...connectionFields } = req.body;
+
     // Aggiorna la connessione mantenendo l'ID e la data di creazione
     connections[connectionIndex] = {
       ...connections[connectionIndex],
-      ...req.body,
-      retentionDays: normalizeRetentionDays(
-        req.body.retentionDays !== undefined
-          ? req.body.retentionDays
-          : connections[connectionIndex].retentionDays,
-        0
-      ),
+      ...connectionFields,
       updatedAt: new Date().toISOString()
     };
     
     saveConnections(); // Salva automaticamente
-    const cleanup = cleanupExpiredBackups();
     res.json({
       success: true,
-      connection: connections[connectionIndex],
-      deletedOnSave: cleanup.deleted
+      connection: connections[connectionIndex]
     });
   } catch (error) {
     res.status(400).json({ success: false, message: error.message });
@@ -520,14 +518,24 @@ app.post('/api/backup', async (req, res) => {
 // Crea backup schedulato
 app.post('/api/scheduled-backups', (req, res) => {
   try {
-    const { connectionId, database, schedule, enabled = true } = req.body;
+    const { connectionId, database, schedule, enabled = true, retentionDays } = req.body;
     
-    console.log('Creazione backup schedulato:', { connectionId, database, schedule, enabled });
+    console.log('Creazione backup schedulato:', { connectionId, database, schedule, enabled, retentionDays });
     
     // Verifica che la connessione esista
     const connection = connections.find(c => c.id === connectionId);
     if (!connection) {
       return res.status(400).json({ success: false, message: 'Connessione non trovata' });
+    }
+
+    if (retentionDays !== undefined) {
+      const days = Number(retentionDays);
+      if (!Number.isInteger(days) || days < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'retentionDays deve essere un intero >= 0 (0 = disabilitata)'
+        });
+      }
     }
     
     const scheduledBackup = {
@@ -536,6 +544,7 @@ app.post('/api/scheduled-backups', (req, res) => {
       database,
       schedule,
       enabled,
+      retentionDays: normalizeRetentionDays(retentionDays, 0),
       createdAt: new Date().toISOString()
     };
     
@@ -670,7 +679,7 @@ function scheduleBackup(scheduledBackup) {
   cron.schedule(scheduledBackup.schedule, async () => {
     try {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const backupFileName = `scheduled_backup_${scheduledBackup.connectionId}_${scheduledBackup.database}_${timestamp}.sql`;
+      const backupFileName = `scheduled_backup_${scheduledBackup.id}_${scheduledBackup.connectionId}_${scheduledBackup.database}_${timestamp}.sql`;
       const backupPath = path.join(backupDir, backupFileName);
 
       log('INFO', 'Avvio backup schedulato', {
@@ -681,6 +690,7 @@ function scheduleBackup(scheduledBackup) {
 
       await runDatabaseDump(connection, scheduledBackup.database, backupPath);
       log('INFO', `Backup schedulato completato: ${backupFileName}`);
+      cleanupExpiredBackups();
     } catch (error) {
       log('ERROR', 'Errore backup schedulato', error.message);
     }

@@ -29,8 +29,7 @@ const Connections = () => {
     port: '3306',
     user: '',
     password: '',
-    databases: '',
-    retentionDays: 0
+    databases: ''
   });
 
   const emptyForm = {
@@ -39,8 +38,7 @@ const Connections = () => {
     port: '3306',
     user: '',
     password: '',
-    databases: '',
-    retentionDays: 0
+    databases: ''
   };
 
   useEffect(() => {
@@ -102,17 +100,8 @@ const Connections = () => {
 
   const saveConnection = async () => {
     try {
-      const days = Number(formData.retentionDays);
-      if (!Number.isInteger(days) || days < 0) {
-        toast.error('I giorni di conservazione devono essere un intero >= 0');
-        return;
-      }
-
       setLoading(true);
-      await axios.post('/api/connections', {
-        ...formData,
-        retentionDays: days
-      });
+      await axios.post('/api/connections', formData);
       toast.success('Connessione salvata con successo!');
       setFormData(emptyForm);
       setShowAddForm(false);
@@ -146,30 +135,16 @@ const Connections = () => {
       port: connection.port,
       user: connection.user,
       password: connection.password,
-      databases: connection.databases || connection.database || '',
-      retentionDays: connection.retentionDays ?? 0
+      databases: connection.databases || connection.database || ''
     });
     setShowEditForm(true);
   };
 
   const updateConnection = async () => {
     try {
-      const days = Number(formData.retentionDays);
-      if (!Number.isInteger(days) || days < 0) {
-        toast.error('I giorni di conservazione devono essere un intero >= 0');
-        return;
-      }
-
       setLoading(true);
-      const response = await axios.put(`/api/connections/${editingConnection.id}`, {
-        ...formData,
-        retentionDays: days
-      });
-      toast.success(
-        response.data.deletedOnSave > 0
-          ? `Connessione aggiornata. Eliminati ${response.data.deletedOnSave} backup scaduti.`
-          : 'Connessione aggiornata con successo!'
-      );
+      await axios.put(`/api/connections/${editingConnection.id}`, formData);
+      toast.success('Connessione aggiornata con successo!');
       setFormData(emptyForm);
       setEditingConnection(null);
       setShowEditForm(false);
@@ -387,24 +362,6 @@ const Connections = () => {
                 Inserisci un database per riga. Usa il pulsante "Cerca" per trovare automaticamente i database disponibili.
               </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Giorni di conservazione
-              </label>
-              <input
-                type="number"
-                name="retentionDays"
-                min="0"
-                step="1"
-                value={formData.retentionDays}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                placeholder="0"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                0 = disabilitata. I backup di questa connessione più vecchi verranno eliminati automaticamente.
-              </p>
-            </div>
           </div>
           <div className="flex space-x-3 mt-6">
             <button
@@ -541,24 +498,6 @@ const Connections = () => {
                 Inserisci un database per riga. Usa il pulsante "Cerca" per trovare automaticamente i database disponibili.
               </p>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Giorni di conservazione
-              </label>
-              <input
-                type="number"
-                name="retentionDays"
-                min="0"
-                step="1"
-                value={formData.retentionDays}
-                onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                placeholder="0"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                0 = disabilitata. I backup di questa connessione più vecchi verranno eliminati automaticamente.
-              </p>
-            </div>
           </div>
           <div className="flex space-x-3 mt-6">
             <button
@@ -613,12 +552,6 @@ const Connections = () => {
                         Database: {connection.databases ? 
                           connection.databases.split('\n').filter(db => db.trim()).join(', ') : 
                           (connection.database || 'Nessun database configurato')}
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Conservazione:{' '}
-                        {Number(connection.retentionDays) > 0
-                          ? `${connection.retentionDays} giorni`
-                          : 'disabilitata'}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         Creato il: {new Date(connection.createdAt).toLocaleDateString('it-IT')}

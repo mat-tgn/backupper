@@ -17,7 +17,8 @@ const ScheduledBackups = () => {
     connectionId: '',
     database: '',
     schedule: '',
-    enabled: true
+    enabled: true,
+    retentionDays: 0
   });
   const [availableDatabases, setAvailableDatabases] = useState([]);
   const [customSchedule, setCustomSchedule] = useState('');
@@ -138,6 +139,12 @@ const ScheduledBackups = () => {
         toast.error('Seleziona una schedulazione valida');
         return;
       }
+
+      const days = Number(formData.retentionDays);
+      if (!Number.isInteger(days) || days < 0) {
+        toast.error('I giorni di conservazione devono essere un intero >= 0');
+        return;
+      }
       
       // Ottieni i database selezionati
       const selectedDbs = availableDatabases.filter(db => db.selected);
@@ -158,7 +165,8 @@ const ScheduledBackups = () => {
           const backupData = {
             ...formData,
             database: db.name,
-            schedule: scheduleToSave
+            schedule: scheduleToSave,
+            retentionDays: days
           };
           
           const response = await axios.post('/api/scheduled-backups', backupData, {
@@ -192,7 +200,8 @@ const ScheduledBackups = () => {
         connectionId: '',
         database: '',
         schedule: '',
-        enabled: true
+        enabled: true,
+        retentionDays: 0
       });
       setCustomSchedule('');
       setShowCustomForm(false);
@@ -480,6 +489,24 @@ const ScheduledBackups = () => {
                 </div>
               )}
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Giorni di conservazione
+              </label>
+              <input
+                type="number"
+                name="retentionDays"
+                min="0"
+                step="1"
+                value={formData.retentionDays}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                placeholder="0"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                0 = disabilitata. I backup di questa operazione più vecchi verranno eliminati automaticamente.
+              </p>
+            </div>
           </div>
           <div className="flex space-x-3 mt-6">
             <button
@@ -537,6 +564,12 @@ const ScheduledBackups = () => {
                       </p>
                       <p className="text-sm text-gray-600">
                         Schedulazione: {backup.schedule}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Conservazione:{' '}
+                        {Number(backup.retentionDays) > 0
+                          ? `${backup.retentionDays} giorni`
+                          : 'disabilitata'}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         Creato il: {new Date(backup.createdAt).toLocaleDateString('it-IT')}

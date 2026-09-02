@@ -349,7 +349,7 @@ const BackupFiles = () => {
               <ul className="space-y-2 text-sm text-gray-600">
                 <li>• I backup sono salvati in formato SQL</li>
                 <li>• Nome file: backup_[connessione]_[database]_[timestamp].sql</li>
-                <li>• La conservazione automatica si configura per ogni connessione</li>
+                <li>• La conservazione automatica si configura per ogni backup schedulato</li>
                 <li>• Compatibili con MySQL e MariaDB</li>
               </ul>
             </div>
