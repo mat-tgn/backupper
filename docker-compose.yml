@@ -15,8 +15,10 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-    depends_on:
-      - mysql
+      - GITHUB_REPO=mat-tgn/backupper
+      - GIT_BRANCH=main
+    # depends_on:
+    #   - mysql
     networks:
       - backupper-network
     restart: unless-stopped

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import axios from 'axios';
 import { 
   Home, 
   Database, 
@@ -10,6 +11,15 @@ import {
 
 const Sidebar = () => {
   const location = useLocation();
+  const [versionLabel, setVersionLabel] = useState(null);
+
+  useEffect(() => {
+    axios.get('/api/updates')
+      .then(({ data }) => {
+        setVersionLabel(data.current?.shortSha || data.current?.version || null);
+      })
+      .catch(() => {});
+  }, []);
 
   const menuItems = [
     { path: '/', icon: Home, label: 'Dashboard' },
@@ -19,7 +29,7 @@ const Sidebar = () => {
   ];
 
   return (
-    <div className="bg-white shadow-lg w-64 flex-shrink-0">
+    <div className="bg-white shadow-lg w-64 flex-shrink-0 relative">
       <div className="p-6">
         <div className="flex items-center justify-center">
           <img 
@@ -62,6 +72,11 @@ const Sidebar = () => {
           })}
         </div>
       </nav>
+      {versionLabel && (
+        <div className="absolute bottom-0 left-0 w-64 px-6 py-4 text-xs text-gray-400">
+          Revisione {versionLabel}
+        </div>
+      )}
     </div>
   );
 };

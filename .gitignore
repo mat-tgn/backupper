@@ -106,4 +106,7 @@ server/backups/
 mysql_data/
 
 # Application data
-server/data/ 
+server/data/
+
+# Revisione applicata dall'auto-aggiornamento in-container
+.app-version.json 

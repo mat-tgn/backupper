@@ -6,6 +6,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
+const updater = require('./updater');
 require('dotenv').config();
 
 const app = express();
@@ -62,6 +63,42 @@ function normalizeRetentionDays(value, fallback = 0) {
   return days;
 }
 
+function normalizeRetentionMode(value) {
+  return value === 'count' ? 'count' : 'days';
+}
+
+function getRetentionPolicy(job) {
+  if (!job) {
+    return { mode: 'days', value: 0 };
+  }
+  const mode = normalizeRetentionMode(job.retentionMode);
+  const rawValue = job.retentionValue !== undefined
+    ? job.retentionValue
+    : job.retentionDays;
+  return {
+    mode,
+    value: normalizeRetentionDays(rawValue, 0)
+  };
+}
+
+function normalizeScheduledRetention(job, fallbackDays = 0) {
+  if (job.retentionMode === undefined && job.retentionValue === undefined) {
+    return {
+      ...job,
+      retentionMode: 'days',
+      retentionValue: normalizeRetentionDays(job.retentionDays, fallbackDays)
+    };
+  }
+  return {
+    ...job,
+    retentionMode: normalizeRetentionMode(job.retentionMode),
+    retentionValue: normalizeRetentionDays(
+      job.retentionValue !== undefined ? job.retentionValue : job.retentionDays,
+      0
+    )
+  };
+}
+
 // Carica le connessioni salvate
 function loadConnections() {
   try {
@@ -96,21 +133,20 @@ function loadScheduledBackups() {
       const globalRetention = normalizeRetentionDays(settings.retentionDays, 0);
       let migrated = false;
       scheduledBackups = scheduledBackups.map((job) => {
-        if (job.retentionDays === undefined) {
+        if (job.retentionMode === undefined || job.retentionValue === undefined) {
           const connection = connections.find((c) => c.id === job.connectionId);
           migrated = true;
-          return {
-            ...job,
-            retentionDays: normalizeRetentionDays(
-              connection?.retentionDays,
-              globalRetention
-            )
-          };
+          return normalizeScheduledRetention(
+            {
+              ...job,
+              retentionDays: job.retentionDays !== undefined
+                ? job.retentionDays
+                : connection?.retentionDays
+            },
+            globalRetention
+          );
         }
-        return {
-          ...job,
-          retentionDays: normalizeRetentionDays(job.retentionDays, 0)
-        };
+        return normalizeScheduledRetention(job, 0);
       });
       if (migrated) {
         saveScheduledBackups();
@@ -207,15 +243,14 @@ function listBackupFiles() {
 const UUID_RE = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 const BACKUP_TS_RE = '\\d{4}-\\d{2}-\\d{2}T\\d{2}-\\d{2}-\\d{2}-\\d{3}Z';
 
-// Retention applicabile a un file di backup (solo operazioni schedulate)
-function getRetentionDaysForBackup(fileName) {
+function findScheduledJobForBackup(fileName) {
   const withJobId = fileName.match(
     new RegExp(`^scheduled_backup_(${UUID_RE})_(${UUID_RE})_.+_${BACKUP_TS_RE}\\.sql$`, 'i')
   );
   if (withJobId) {
     const job = scheduledBackups.find((j) => j.id === withJobId[1]);
     if (job) {
-      return normalizeRetentionDays(job.retentionDays, 0);
+      return job;
     }
   }
 
@@ -225,43 +260,64 @@ function getRetentionDaysForBackup(fileName) {
   if (legacyScheduled) {
     const connectionId = legacyScheduled[1];
     const database = legacyScheduled[2];
-    const matchingJobs = scheduledBackups.filter(
+    return scheduledBackups.find(
       (j) => j.connectionId === connectionId && j.database === database
-    );
-    if (matchingJobs.length === 0) {
-      return 0;
-    }
-    return Math.max(
-      ...matchingJobs.map((j) => normalizeRetentionDays(j.retentionDays, 0))
-    );
+    ) || null;
   }
 
-  // Backup manuali e file non riconducibili a un'operazione: nessuna retention automatica
-  return 0;
+  return null;
 }
 
-// Elimina i backup schedulati più vecchi del periodo di retention dell'operazione
+function deleteExpiredBackupFile(fileName, reason) {
+  try {
+    fs.unlinkSync(path.join(backupDir, fileName));
+    console.log(`Backup scaduto eliminato: ${fileName} (${reason})`);
+    return true;
+  } catch (error) {
+    console.error(`Errore eliminazione backup scaduto ${fileName}:`, error.message);
+    return false;
+  }
+}
+
+// Elimina i backup schedulati oltre la retention dell'operazione (giorni o numero)
 function cleanupExpiredBackups() {
   let deleted = 0;
   const now = new Date();
-  const backupFiles = listBackupFiles();
+  const filesByJob = new Map();
 
-  for (const file of backupFiles) {
-    const retentionDays = getRetentionDaysForBackup(file.name);
-    if (!retentionDays || retentionDays <= 0) {
+  for (const file of listBackupFiles()) {
+    const job = findScheduledJobForBackup(file.name);
+    if (!job) {
+      continue;
+    }
+    if (!filesByJob.has(job.id)) {
+      filesByJob.set(job.id, { job, files: [] });
+    }
+    filesByJob.get(job.id).files.push(file);
+  }
+
+  for (const { job, files } of filesByJob.values()) {
+    const { mode, value } = getRetentionPolicy(job);
+    if (!value || value <= 0) {
       continue;
     }
 
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - retentionDays);
+    let toDelete = [];
+    if (mode === 'count') {
+      toDelete = files.slice(value);
+    } else {
+      const cutoff = new Date(now);
+      cutoff.setDate(cutoff.getDate() - value);
+      toDelete = files.filter((file) => new Date(file.createdAt) < cutoff);
+    }
 
-    if (new Date(file.createdAt) < cutoff) {
-      try {
-        fs.unlinkSync(path.join(backupDir, file.name));
+    const reason = mode === 'count'
+      ? `retention ${value} file`
+      : `retention ${value}g`;
+
+    for (const file of toDelete) {
+      if (deleteExpiredBackupFile(file.name, reason)) {
         deleted += 1;
-        console.log(`Backup scaduto eliminato: ${file.name} (retention ${retentionDays}g)`);
-      } catch (error) {
-        console.error(`Errore eliminazione backup scaduto ${file.name}:`, error.message);
       }
     }
   }
@@ -518,9 +574,24 @@ app.post('/api/backup', async (req, res) => {
 // Crea backup schedulato
 app.post('/api/scheduled-backups', (req, res) => {
   try {
-    const { connectionId, database, schedule, enabled = true, retentionDays } = req.body;
+    const {
+      connectionId,
+      database,
+      schedule,
+      enabled = true,
+      retentionMode,
+      retentionValue,
+      retentionDays
+    } = req.body;
     
-    console.log('Creazione backup schedulato:', { connectionId, database, schedule, enabled, retentionDays });
+    console.log('Creazione backup schedulato:', {
+      connectionId,
+      database,
+      schedule,
+      enabled,
+      retentionMode,
+      retentionValue
+    });
     
     // Verifica che la connessione esista
     const connection = connections.find(c => c.id === connectionId);
@@ -528,12 +599,20 @@ app.post('/api/scheduled-backups', (req, res) => {
       return res.status(400).json({ success: false, message: 'Connessione non trovata' });
     }
 
-    if (retentionDays !== undefined) {
-      const days = Number(retentionDays);
-      if (!Number.isInteger(days) || days < 0) {
+    if (retentionMode !== undefined && retentionMode !== 'days' && retentionMode !== 'count') {
+      return res.status(400).json({
+        success: false,
+        message: 'retentionMode deve essere "days" o "count"'
+      });
+    }
+
+    const incomingRetentionValue = retentionValue !== undefined ? retentionValue : retentionDays;
+    if (incomingRetentionValue !== undefined) {
+      const amount = Number(incomingRetentionValue);
+      if (!Number.isInteger(amount) || amount < 0) {
         return res.status(400).json({
           success: false,
-          message: 'retentionDays deve essere un intero >= 0 (0 = disabilitata)'
+          message: 'Il valore di conservazione deve essere un intero >= 0 (0 = disabilitata)'
         });
       }
     }
@@ -544,7 +623,8 @@ app.post('/api/scheduled-backups', (req, res) => {
       database,
       schedule,
       enabled,
-      retentionDays: normalizeRetentionDays(retentionDays, 0),
+      retentionMode: normalizeRetentionMode(retentionMode),
+      retentionValue: normalizeRetentionDays(incomingRetentionValue, 0),
       createdAt: new Date().toISOString()
     };
     
@@ -582,6 +662,33 @@ app.delete('/api/scheduled-backups/:id', (req, res) => {
   scheduledBackups = scheduledBackups.filter(backup => backup.id !== id);
   saveScheduledBackups(); // Salva automaticamente
   res.json({ success: true });
+});
+
+app.get('/api/updates', async (req, res) => {
+  try {
+    res.json(await updater.checkUpdate());
+  } catch (error) {
+    log('ERROR', 'Controllo aggiornamenti fallito', error.message);
+    res.status(502).json({ success: false, message: error.message });
+  }
+});
+
+app.get('/api/updates/status', (req, res) => {
+  res.json(updater.getUpdateStatus());
+});
+
+app.post('/api/updates/apply', async (req, res) => {
+  try {
+    const result = await updater.applyUpdate();
+    res.json(result);
+    if (result.restarting) {
+      setTimeout(() => process.exit(0), 1500);
+    }
+  } catch (error) {
+    log('ERROR', 'Applicazione aggiornamento fallita', error.message);
+    const status = error.code === 'UPDATE_IN_PROGRESS' ? 409 : 500;
+    res.status(status).json({ success: false, message: error.message });
+  }
 });
 
 // Impostazioni applicazione

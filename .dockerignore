@@ -1,10 +1,33 @@
+# Dipendenze (installate di nuovo in Docker)
+**/node_modules
 node_modules
-npm-debug.log
+
+# Git e docs
 .git
 .gitignore
 README.md
+
+# Env e segreti
 .env
-.nyc_output
+.env.*
+
+# Artifact e cache
+client/build
+client/dist
 coverage
+.nyc_output
+.cache
+.eslintcache
+
+# Runtime / volumi (non servono in build)
+server/backups
+server/data
+logs
+.app-version.json
+*.log
+*.sql
+
+# OS / IDE
 .DS_Store
-*.log 
+.vscode
+.idea

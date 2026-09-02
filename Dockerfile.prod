@@ -23,7 +23,8 @@ COPY server ./server
 # Immagine di produzione (senza sorgenti client né tool di build)
 FROM node:18-alpine AS production
 
-RUN apk add --no-cache mysql-client
+# curl/tar: download aggiornamenti; python/make/g++: npm install in-container
+RUN apk add --no-cache mysql-client curl tar python3 make g++
 
 RUN addgroup -g 1001 -S nodejs \
   && adduser -S backupper -u 1001
@@ -33,8 +34,8 @@ WORKDIR /app
 COPY --from=builder --chown=backupper:nodejs /app/server ./server
 COPY --from=builder --chown=backupper:nodejs /app/client/build ./client/build
 
-RUN mkdir -p /app/server/backups /app/server/data /app/logs \
-  && chown -R backupper:nodejs /app/server/backups /app/server/data /app/logs
+RUN mkdir -p /app/server/backups /app/server/data /app/logs /app/client \
+  && chown -R backupper:nodejs /app
 
 USER backupper
 
