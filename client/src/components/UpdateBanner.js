@@ -64,14 +64,14 @@ const UpdateBanner = () => {
   }
 
   return (
-    <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
+    <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3">
           <div className="rounded-lg bg-amber-100 p-2">
             <RefreshCw className={`h-5 w-5 text-amber-700 ${applying ? 'animate-spin' : ''}`} />
           </div>
           <div>
-            <p className="font-semibold text-amber-900">È disponibile un aggiornamento</p>
+            <p className="font-semibold text-amber-950">È disponibile un aggiornamento</p>
             <p className="mt-1 text-sm text-amber-800">
               In esecuzione: {info.current.shortSha || info.current.version}
               {' → '}
@@ -111,7 +111,7 @@ const UpdateBanner = () => {
                 type="button"
                 onClick={dismiss}
                 disabled={applying}
-                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100"
+                className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-medium text-amber-900 hover:bg-amber-100"
               >
                 Dopo
               </button>
@@ -122,7 +122,7 @@ const UpdateBanner = () => {
           type="button"
           onClick={dismiss}
           disabled={applying}
-          className="text-amber-700 hover:text-amber-900"
+          className="rounded-lg p-1 text-amber-700 hover:bg-amber-100 hover:text-amber-950"
           aria-label="Chiudi avviso aggiornamento"
         >
           <X className="h-4 w-4" />

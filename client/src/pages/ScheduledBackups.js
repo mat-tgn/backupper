@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import PageHeader from '../components/PageHeader';
 
 const ScheduledBackups = () => {
   const [scheduledBackups, setScheduledBackups] = useState([]);
@@ -251,32 +252,30 @@ const ScheduledBackups = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Backup Schedulati</h1>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
-        >
-          <Plus className="h-5 w-5" />
-          <span>Nuovo Backup Schedulato</span>
-        </button>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Backup schedulati"
+        subtitle="Pianifica dump automatici e definisci la conservazione"
+        actions={
+          <button onClick={() => setShowAddForm(true)} className="btn-primary">
+            <Plus className="h-4 w-4" />
+            <span>Nuova schedulazione</span>
+          </button>
+        }
+      />
 
       {/* Form per nuovo backup schedulato */}
       {showAddForm && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Nuovo Backup Schedulato</h2>
+        <div className="card p-6">
+          <h2 className="card-title mb-5">Nuova schedulazione</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Connessione
-              </label>
+              <label className="field-label">Connessione</label>
               <select
                 name="connectionId"
                 value={formData.connectionId}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
               >
                 <option value="">Seleziona una connessione</option>
                 {connections.map((connection) => (
@@ -287,73 +286,71 @@ const ScheduledBackups = () => {
               </select>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="field-label">
                 Database ({availableDatabases.filter(db => db.selected).length} selezionati)
               </label>
               {formData.connectionId ? (
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">
+                    <span className="text-sm text-slate-500">
                       Seleziona i database per il backup
                     </span>
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-3">
                       <button
                         type="button"
                         onClick={selectAllDatabases}
-                        className="text-xs text-blue-600 hover:text-blue-700"
+                        className="text-xs font-medium text-primary-600 hover:text-primary-700"
                       >
-                        Seleziona Tutti
+                        Seleziona tutti
                       </button>
                       <button
                         type="button"
                         onClick={deselectAllDatabases}
-                        className="text-xs text-gray-600 hover:text-gray-700"
+                        className="text-xs font-medium text-slate-500 hover:text-slate-700"
                       >
-                        Deseleziona Tutti
+                        Deseleziona
                       </button>
                     </div>
                   </div>
                   
                   {availableDatabases.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 p-3">
                       {availableDatabases.map((db, index) => (
                         <label
                           key={index}
-                          className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                          className="flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
                         >
                           <input
                             type="checkbox"
                             checked={db.selected}
                             onChange={() => toggleDatabaseSelection(index)}
-                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                            className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-slate-300 rounded"
                           />
-                          <span className="text-sm text-gray-900">{db.name}</span>
+                          <span className="text-sm text-slate-900">{db.name}</span>
                         </label>
                       ))}
                     </div>
                   ) : (
-                    <div className="text-center py-4 text-gray-500">
-                      <Database className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                    <div className="text-center py-6 text-slate-500">
+                      <Database className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                       <p className="text-sm">Nessun database configurato per questa connessione</p>
                     </div>
                   )}
                 </div>
               ) : (
-                <div className="text-center py-4 text-gray-500">
-                  <Database className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                <div className="text-center py-6 text-slate-500">
+                  <Database className="h-8 w-8 mx-auto mb-2 text-slate-300" />
                   <p className="text-sm">Seleziona prima una connessione</p>
                 </div>
               )}
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Schedulazione
-              </label>
+              <label className="field-label">Schedulazione</label>
               <select
                 name="schedule"
                 value={formData.schedule}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
               >
                 <option value="">Seleziona una schedulazione</option>
                 {scheduleOptions.map((option) => (
@@ -363,19 +360,17 @@ const ScheduledBackups = () => {
                 ))}
               </select>
               {formData.schedule === 'custom' && showCustomForm && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="text-sm font-medium text-gray-700 mb-3">Configura Schedulazione Personalizzata</h4>
+                <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                  <h4 className="text-sm font-medium text-slate-700 mb-3">Schedulazione personalizzata</h4>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Minuti */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Minuti
-                      </label>
+                      <label className="field-label">Minuti</label>
                       <select
                         value={customFormData.minute}
                         onChange={(e) => handleCustomFormChange('minute', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="field-input"
                       >
                         <option value="*">Ogni minuto</option>
                         <option value="0">Al minuto 0</option>
@@ -388,13 +383,11 @@ const ScheduledBackups = () => {
 
                     {/* Ore */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Ore
-                      </label>
+                      <label className="field-label">Ore</label>
                       <select
                         value={customFormData.hour}
                         onChange={(e) => handleCustomFormChange('hour', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="field-input"
                       >
                         <option value="*">Ogni ora</option>
                         <option value="0">A mezzanotte (00:00)</option>
@@ -409,13 +402,11 @@ const ScheduledBackups = () => {
 
                     {/* Giorni */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Giorni del Mese
-                      </label>
+                      <label className="field-label">Giorni del mese</label>
                       <select
                         value={customFormData.day}
                         onChange={(e) => handleCustomFormChange('day', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="field-input"
                       >
                         <option value="*">Ogni giorno</option>
                         <option value="1">Il primo del mese</option>
@@ -426,13 +417,11 @@ const ScheduledBackups = () => {
 
                     {/* Mesi */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Mesi
-                      </label>
+                      <label className="field-label">Mesi</label>
                       <select
                         value={customFormData.month}
                         onChange={(e) => handleCustomFormChange('month', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="field-input"
                       >
                         <option value="*">Ogni mese</option>
                         <option value="1">Gennaio</option>
@@ -453,13 +442,11 @@ const ScheduledBackups = () => {
 
                     {/* Giorni della Settimana */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Giorni della Settimana
-                      </label>
+                      <label className="field-label">Giorni della settimana</label>
                       <select
                         value={customFormData.dayOfWeek}
                         onChange={(e) => handleCustomFormChange('dayOfWeek', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                        className="field-input"
                       >
                         <option value="*">Ogni giorno</option>
                         <option value="1">Lunedì</option>
@@ -475,17 +462,15 @@ const ScheduledBackups = () => {
                   </div>
 
                   {/* Espressione Cron Generata */}
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Espressione Cron Generata
-                    </label>
+                  <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+                    <label className="field-label">Espressione cron</label>
                     <input
                       type="text"
                       value={customSchedule}
                       readOnly
-                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-mono"
+                      className="field-input font-mono"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1.5">
                       Questa espressione verrà utilizzata per la schedulazione
                     </p>
                   </div>
@@ -493,29 +478,27 @@ const ScheduledBackups = () => {
               )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Conservazione
-              </label>
+              <label className="field-label">Conservazione</label>
               <div className="flex flex-wrap gap-4 mb-2">
-                <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                <label className="inline-flex items-center space-x-2 text-sm text-slate-700">
                   <input
                     type="radio"
                     name="retentionMode"
                     value="days"
                     checked={formData.retentionMode === 'days'}
                     onChange={handleInputChange}
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-slate-300"
                   />
                   <span>Giorni di conservazione</span>
                 </label>
-                <label className="inline-flex items-center space-x-2 text-sm text-gray-700">
+                <label className="inline-flex items-center space-x-2 text-sm text-slate-700">
                   <input
                     type="radio"
                     name="retentionMode"
                     value="count"
                     checked={formData.retentionMode === 'count'}
                     onChange={handleInputChange}
-                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-slate-300"
                   />
                   <span>Numero di backup conservati</span>
                 </label>
@@ -527,28 +510,25 @@ const ScheduledBackups = () => {
                 step="1"
                 value={formData.retentionValue}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="0"
               />
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1.5">
                 {formData.retentionMode === 'count'
                   ? '0 = disabilitata. Esempio: backup ogni ora e 12 file = ultime 12 ore.'
                   : '0 = disabilitata. I backup di questa operazione più vecchi verranno eliminati automaticamente.'}
               </p>
             </div>
           </div>
-          <div className="flex space-x-3 mt-6">
+          <div className="flex flex-wrap gap-3 mt-6">
             <button
               onClick={saveScheduledBackup}
               disabled={loading || !formData.connectionId || availableDatabases.filter(db => db.selected).length === 0 || !formData.schedule || (formData.schedule === 'custom' && !customSchedule)}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+              className="btn-primary"
             >
-              {loading ? 'Salvando...' : 'Salva Backup Schedulato'}
+              {loading ? 'Salvando...' : 'Salva schedulazione'}
             </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
+            <button onClick={() => setShowAddForm(false)} className="btn-secondary">
               Annulla
             </button>
           </div>
@@ -556,45 +536,38 @@ const ScheduledBackups = () => {
       )}
 
       {/* Lista backup schedulati */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Backup Schedulati</h2>
+      <div className="card">
+        <div className="card-header">
+          <h2 className="card-title">Schedulazioni</h2>
         </div>
-        <div className="p-6">
+        <div className="p-5">
           {scheduledBackups.length === 0 ? (
-            <div className="text-center py-8">
-              <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">Nessun backup schedulato</p>
-              <p className="text-sm text-gray-400 mt-1">Crea il tuo primo backup automatico</p>
+            <div className="empty-state">
+              <Clock className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              <p className="font-medium text-slate-600">Nessun backup schedulato</p>
+              <p className="text-sm text-slate-400 mt-1">Crea il tuo primo backup automatico</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {scheduledBackups.map((backup) => (
-                <div
-                  key={backup.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="text-lg font-semibold text-gray-900">
+                <div key={backup.id} className="list-row">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="font-semibold text-slate-900">
                           {getConnectionName(backup.connectionId)}
                         </h3>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        <span className={`badge ${
                           backup.enabled 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-gray-100 text-gray-800'
+                            ? 'bg-emerald-50 text-emerald-700' 
+                            : 'bg-slate-100 text-slate-600'
                         }`}>
                           {backup.enabled ? 'Attivo' : 'Disabilitato'}
                         </span>
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">
-                        Database: {backup.database}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        Schedulazione: {backup.schedule}
-                      </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-slate-500 mt-1">Database: {backup.database}</p>
+                      <p className="text-sm text-slate-500 font-mono">Cron: {backup.schedule}</p>
+                      <p className="text-sm text-slate-500">
                         Conservazione:{' '}
                         {Number(backup.retentionValue ?? backup.retentionDays) > 0
                           ? backup.retentionMode === 'count'
@@ -602,19 +575,17 @@ const ScheduledBackups = () => {
                             : `${backup.retentionValue ?? backup.retentionDays} giorni`
                           : 'disabilitata'}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Creato il: {new Date(backup.createdAt).toLocaleDateString('it-IT')}
+                      <p className="text-xs text-slate-400 mt-1">
+                        Creato il {new Date(backup.createdAt).toLocaleDateString('it-IT')}
                       </p>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => deleteScheduledBackup(backup.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                        title="Elimina Backup Schedulato"
-                      >
-                        <Trash2 className="h-5 w-5" />
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => deleteScheduledBackup(backup.id)}
+                      className="btn-icon-danger"
+                      title="Elimina schedulazione"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
                   </div>
                 </div>
               ))}

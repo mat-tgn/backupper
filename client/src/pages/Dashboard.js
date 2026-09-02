@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Database, 
-  Clock, 
-  FolderOpen, 
+import {
+  Database,
+  Clock,
+  FolderOpen,
   Play,
   Plus,
-  TrendingUp
+  Activity
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import PageHeader from '../components/PageHeader';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -39,139 +40,107 @@ const Dashboard = () => {
     }
   };
 
+  const statCards = [
+    { label: 'Connessioni', value: stats.connections, icon: Database, tone: 'bg-indigo-50 text-indigo-600' },
+    { label: 'Backup schedulati', value: stats.scheduledBackups, icon: Clock, tone: 'bg-violet-50 text-violet-600' },
+    { label: 'File di backup', value: stats.backupFiles, icon: FolderOpen, tone: 'bg-emerald-50 text-emerald-600' },
+  ];
+
   const quickActions = [
     {
-      title: 'Nuova Connessione',
-      description: 'Aggiungi una nuova connessione MySQL',
+      title: 'Nuova connessione',
+      description: 'Collega un server MySQL',
       icon: Plus,
       link: '/connections',
-      color: 'bg-blue-500'
+      tone: 'bg-indigo-600'
     },
     {
-      title: 'Backup Manuale',
-      description: 'Esegui un backup immediato',
+      title: 'Backup manuale',
+      description: 'Esegui un dump immediato',
       icon: Play,
       link: '/connections',
-      color: 'bg-green-500'
+      tone: 'bg-emerald-600'
     },
     {
-      title: 'Nuovo Backup Schedulato',
-      description: 'Crea un nuovo backup automatico',
+      title: 'Nuova schedulazione',
+      description: 'Automatizza i backup',
       icon: Clock,
       link: '/scheduled-backups',
-      color: 'bg-purple-500'
+      tone: 'bg-violet-600'
     }
   ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <div className="flex items-center space-x-2 text-sm text-gray-500">
-          <TrendingUp className="h-4 w-4" />
-          <span>Gestione Backup MySQL</span>
+    <div className="space-y-8">
+      <PageHeader
+        title="Dashboard"
+        subtitle="Stato e azioni rapide per i backup MySQL"
+      />
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        {statCards.map((stat) => {
+          const Icon = stat.icon;
+          return (
+            <div key={stat.label} className="card p-5">
+              <div className="flex items-center gap-4">
+                <div className={`rounded-lg p-2.5 ${stat.tone}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">{stat.label}</p>
+                  <p className="text-2xl font-semibold tracking-tight text-slate-900">{stat.value}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <h2 className="card-title">Azioni rapide</h2>
+        </div>
+        <div className="grid grid-cols-1 gap-4 p-5 md:grid-cols-3">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.title}
+                to={action.link}
+                className="group rounded-xl border border-slate-200 p-5 transition hover:border-slate-300 hover:shadow-card"
+              >
+                <div className={`mb-4 inline-flex rounded-lg p-2.5 text-white ${action.tone}`}>
+                  <Icon className="h-5 w-5" />
+                </div>
+                <h3 className="font-semibold text-slate-900 group-hover:text-primary-700">
+                  {action.title}
+                </h3>
+                <p className="mt-1 text-sm text-slate-500">{action.description}</p>
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      {/* Statistiche */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <Database className="h-6 w-6 text-blue-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Connessioni</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.connections}</p>
-            </div>
+      <div className="card">
+        <div className="card-header">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-slate-400" />
+            <h2 className="card-title">Stato del sistema</h2>
           </div>
         </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-purple-100 rounded-lg">
-              <Clock className="h-6 w-6 text-purple-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Backup Schedulati</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.scheduledBackups}</p>
-            </div>
+        <div className="divide-y divide-slate-100">
+          <div className="flex items-center justify-between px-6 py-4">
+            <span className="text-sm text-slate-600">Server backend</span>
+            <span className="badge bg-emerald-50 text-emerald-700">Online</span>
           </div>
-        </div>
-
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center">
-            <div className="p-2 bg-green-100 rounded-lg">
-              <FolderOpen className="h-6 w-6 text-green-600" />
-            </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">File di Backup</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.backupFiles}</p>
-            </div>
+          <div className="flex items-center justify-between px-6 py-4">
+            <span className="text-sm text-slate-600">Connessioni MySQL</span>
+            <span className="badge bg-amber-50 text-amber-800">{stats.connections} configurate</span>
           </div>
-        </div>
-      </div>
-
-      {/* Azioni Rapide */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Azioni Rapide</h2>
-        </div>
-        <div className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {quickActions.map((action, index) => {
-              const Icon = action.icon;
-              return (
-                <Link
-                  key={index}
-                  to={action.link}
-                  className="block p-6 border border-gray-200 rounded-lg hover:border-gray-300 hover:shadow-md transition-all"
-                >
-                  <div className="flex items-center space-x-4">
-                    <div className={`p-3 rounded-lg ${action.color}`}>
-                      <Icon className="h-6 w-6 text-white" />
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {action.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {action.description}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Stato del Sistema */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Stato del Sistema</h2>
-        </div>
-        <div className="p-6">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Server Backend</span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                Online
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Database MySQL</span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                Connessioni: {stats.connections}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-gray-700">Backup Automatici</span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                Attivi: {stats.scheduledBackups}
-              </span>
-            </div>
+          <div className="flex items-center justify-between px-6 py-4">
+            <span className="text-sm text-slate-600">Backup automatici</span>
+            <span className="badge bg-indigo-50 text-indigo-700">{stats.scheduledBackups} attivi</span>
           </div>
         </div>
       </div>
@@ -179,4 +148,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

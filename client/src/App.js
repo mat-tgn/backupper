@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { Menu } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import UpdateBanner from './components/UpdateBanner';
 import Dashboard from './pages/Dashboard';
@@ -9,13 +10,26 @@ import ScheduledBackups from './pages/ScheduledBackups';
 import BackupFiles from './pages/BackupFiles';
 
 function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
   return (
     <Router>
-      <div className="flex h-screen bg-gray-50">
-        <Sidebar />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
-            <div className="container mx-auto px-6 py-8">
+      <div className="flex h-screen bg-slate-100">
+        <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-4 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              className="rounded-lg p-2 text-slate-600 hover:bg-slate-100"
+              aria-label="Apri menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+            <span className="text-sm font-semibold text-slate-900">Backupper</span>
+          </div>
+          <main className="flex-1 overflow-x-hidden overflow-y-auto">
+            <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
               <UpdateBanner />
               <Routes>
                 <Route path="/" element={<Dashboard />} />
@@ -26,10 +40,20 @@ function App() {
             </div>
           </main>
         </div>
-        <Toaster position="top-right" />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            className: 'text-sm font-medium',
+            style: {
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 8px 24px -8px rgb(15 23 42 / 0.16)',
+            },
+          }}
+        />
       </div>
     </Router>
   );
 }
 
-export default App; 
+export default App;

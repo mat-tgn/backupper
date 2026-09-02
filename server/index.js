@@ -810,13 +810,23 @@ function scheduleBackup(scheduledBackup) {
   });
 }
 
-// Servi i file statici del client React
-app.use(express.static(path.join(__dirname, '../client/build')));
+// Servi i file statici del client React (solo se è stata fatta la build)
+const clientBuildDir = path.join(__dirname, '../client/build');
+const clientIndex = path.join(clientBuildDir, 'index.html');
 
-// Gestisci tutte le route del client React
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../client/build/index.html'));
-});
+if (fs.existsSync(clientIndex)) {
+  app.use(express.static(clientBuildDir));
+  app.get('*', (req, res) => {
+    res.sendFile(clientIndex);
+  });
+} else {
+  app.get('*', (req, res) => {
+    res.status(503).type('text').send(
+      'Frontend non compilato. In sviluppo apri http://localhost:3000 (npm run dev) ' +
+      'oppure genera la build con: cd client && npm run build'
+    );
+  });
+}
 
 // Avvia server
 app.listen(PORT, () => {

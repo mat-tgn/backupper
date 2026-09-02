@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import PageHeader from '../components/PageHeader';
 
 const Connections = () => {
   const [connections, setConnections] = useState([]);
@@ -243,147 +244,127 @@ const Connections = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Connessioni MySQL</h1>
-        <button
-          onClick={() => setShowAddForm(true)}
-          className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 flex items-center space-x-2"
-        >
-          <Plus className="h-5 w-5" />
-          <span>Nuova Connessione</span>
-        </button>
-      </div>
+    <div className="space-y-8">
+      <PageHeader
+        title="Connessioni MySQL"
+        subtitle="Gestisci host, credenziali e database da includere nei backup"
+        actions={
+          <button onClick={() => setShowAddForm(true)} className="btn-primary">
+            <Plus className="h-4 w-4" />
+            <span>Nuova connessione</span>
+          </button>
+        }
+      />
 
       {/* Form per nuova connessione */}
       {showAddForm && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Nuova Connessione</h2>
+        <div className="card p-6">
+          <h2 className="card-title mb-5">Nuova connessione</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nome Connessione
-              </label>
+              <label className="field-label">Nome connessione</label>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="Es: Database Produzione"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Host
-              </label>
+              <label className="field-label">Host</label>
               <input
                 type="text"
                 name="host"
                 value={formData.host}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="localhost"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Porta
-              </label>
+              <label className="field-label">Porta</label>
               <input
                 type="number"
                 name="port"
                 value={formData.port}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="3306"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Utente
-              </label>
+              <label className="field-label">Utente</label>
               <input
                 type="text"
                 name="user"
                 value={formData.user}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="root"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
+              <label className="field-label">Password</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                  className="field-input pr-10"
                   placeholder="Password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Database (uno per riga)
-              </label>
+              <label className="field-label">Database (uno per riga)</label>
               <div className="flex space-x-2">
                 <textarea
                   name="databases"
                   value={formData.databases}
                   onChange={handleInputChange}
                   rows={4}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="field-input flex-1"
                   placeholder="mio_database&#10;altro_database&#10;terzo_database"
                 />
                 <button
                   type="button"
                   onClick={discoverDatabases}
                   disabled={loading || !formData.host || !formData.user || !formData.password}
-                  className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-1"
+                  className="btn-primary h-fit"
                   title="Cerca database automaticamente"
                 >
                   <Search className="h-4 w-4" />
                   <span className="hidden sm:inline">Cerca</span>
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1.5">
                 Inserisci un database per riga. Usa il pulsante "Cerca" per trovare automaticamente i database disponibili.
               </p>
             </div>
           </div>
-          <div className="flex space-x-3 mt-6">
-            <button
-              onClick={testConnection}
-              disabled={loading}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
-            >
-              {loading ? 'Testando...' : 'Test Connessione'}
+          <div className="flex flex-wrap gap-3 mt-6">
+            <button onClick={testConnection} disabled={loading} className="btn-secondary">
+              {loading ? 'Testando...' : 'Test connessione'}
             </button>
-            <button
-              onClick={saveConnection}
-              disabled={loading}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {loading ? 'Salvando...' : 'Salva Connessione'}
+            <button onClick={saveConnection} disabled={loading} className="btn-primary">
+              {loading ? 'Salvando...' : 'Salva connessione'}
             </button>
             <button
               onClick={() => {
                 setShowAddForm(false);
                 setFormData(emptyForm);
               }}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="btn-secondary"
             >
               Annulla
             </button>
@@ -393,119 +374,103 @@ const Connections = () => {
 
       {/* Form per modifica connessione */}
       {showEditForm && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Modifica Connessione</h2>
+        <div className="card p-6">
+          <h2 className="card-title mb-5">Modifica connessione</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Nome Connessione
-              </label>
+              <label className="field-label">Nome connessione</label>
               <input
                 type="text"
                 name="name"
                 value={formData.name}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="Es: Database Produzione"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Host
-              </label>
+              <label className="field-label">Host</label>
               <input
                 type="text"
                 name="host"
                 value={formData.host}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="localhost"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Porta
-              </label>
+              <label className="field-label">Porta</label>
               <input
                 type="number"
                 name="port"
                 value={formData.port}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="3306"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Utente
-              </label>
+              <label className="field-label">Utente</label>
               <input
                 type="text"
                 name="user"
                 value={formData.user}
                 onChange={handleInputChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                className="field-input"
                 placeholder="root"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Password
-              </label>
+              <label className="field-label">Password</label>
               <div className="relative">
                 <input
                   type={showEditPassword ? 'text' : 'password'}
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent pr-10"
+                  className="field-input pr-10"
                   placeholder="Password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowEditPassword(!showEditPassword)}
-                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                 >
                   {showEditPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
             <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Database (uno per riga)
-              </label>
+              <label className="field-label">Database (uno per riga)</label>
               <div className="flex space-x-2">
                 <textarea
                   name="databases"
                   value={formData.databases}
                   onChange={handleInputChange}
                   rows={4}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  className="field-input flex-1"
                   placeholder="mio_database&#10;altro_database&#10;terzo_database"
                 />
                 <button
                   type="button"
                   onClick={discoverDatabases}
                   disabled={loading || !formData.host || !formData.user || !formData.password}
-                  className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center space-x-1"
+                  className="btn-primary h-fit"
                   title="Cerca database automaticamente"
                 >
                   <Search className="h-4 w-4" />
                   <span className="hidden sm:inline">Cerca</span>
                 </button>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1.5">
                 Inserisci un database per riga. Usa il pulsante "Cerca" per trovare automaticamente i database disponibili.
               </p>
             </div>
           </div>
-          <div className="flex space-x-3 mt-6">
-            <button
-              onClick={updateConnection}
-              disabled={loading}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
-            >
-              {loading ? 'Aggiornando...' : 'Aggiorna Connessione'}
+          <div className="flex flex-wrap gap-3 mt-6">
+            <button onClick={updateConnection} disabled={loading} className="btn-primary">
+              {loading ? 'Aggiornando...' : 'Aggiorna connessione'}
             </button>
             <button
               onClick={() => {
@@ -513,7 +478,7 @@ const Connections = () => {
                 setEditingConnection(null);
                 setFormData(emptyForm);
               }}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              className="btn-secondary"
             >
               Annulla
             </button>
@@ -522,61 +487,56 @@ const Connections = () => {
       )}
 
       {/* Lista connessioni */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Connessioni Salvate</h2>
+      <div className="card">
+        <div className="card-header">
+          <h2 className="card-title">Connessioni salvate</h2>
         </div>
-        <div className="p-6">
+        <div className="p-5">
           {connections.length === 0 ? (
-            <div className="text-center py-8">
-              <Database className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">Nessuna connessione salvata</p>
-              <p className="text-sm text-gray-400 mt-1">Aggiungi la tua prima connessione MySQL</p>
+            <div className="empty-state">
+              <Database className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-600 font-medium">Nessuna connessione salvata</p>
+              <p className="text-sm text-slate-400 mt-1">Aggiungi la tua prima connessione MySQL</p>
             </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {connections.map((connection) => (
-                <div
-                  key={connection.id}
-                  className="border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {connection.name}
-                      </h3>
-                      <p className="text-sm text-gray-600">
+                <div key={connection.id} className="list-row">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-slate-900">{connection.name}</h3>
+                      <p className="text-sm text-slate-500 font-mono">
                         {connection.host}:{connection.port}
                       </p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-slate-500 mt-1">
                         Database: {connection.databases ? 
                           connection.databases.split('\n').filter(db => db.trim()).join(', ') : 
                           (connection.database || 'Nessun database configurato')}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Creato il: {new Date(connection.createdAt).toLocaleDateString('it-IT')}
+                      <p className="text-xs text-slate-400 mt-1">
+                        Creato il {new Date(connection.createdAt).toLocaleDateString('it-IT')}
                       </p>
                     </div>
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center space-x-1">
                       <button
                         onClick={() => editConnection(connection)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                        title="Modifica Connessione"
+                        className="btn-icon-info"
+                        title="Modifica connessione"
                       >
                         <Edit className="h-5 w-5" />
                       </button>
                       <button
                         onClick={() => runBackup(connection)}
                         disabled={loading}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg disabled:opacity-50"
-                        title="Esegui Backup"
+                        className="btn-icon-success disabled:opacity-50"
+                        title="Esegui backup"
                       >
                         <Play className="h-5 w-5" />
                       </button>
                       <button
                         onClick={() => deleteConnection(connection.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-                        title="Elimina Connessione"
+                        className="btn-icon-danger"
+                        title="Elimina connessione"
                       >
                         <Trash2 className="h-5 w-5" />
                       </button>
@@ -591,73 +551,67 @@ const Connections = () => {
 
       {/* Dialog per selezione database backup */}
       {showBackupDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">
-                Seleziona Database per Backup
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                {selectedConnection?.name} - {selectedDatabases.length} database disponibili
-              </p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+          <div className="card mx-4 w-full max-w-md shadow-card-hover">
+            <div className="card-header">
+              <div>
+                <h3 className="card-title">Seleziona database</h3>
+                <p className="text-sm text-slate-500 mt-1">
+                  {selectedConnection?.name} — {selectedDatabases.length} disponibili
+                </p>
+              </div>
             </div>
             
             <div className="px-6 py-4">
               <div className="flex justify-between items-center mb-4">
-                <span className="text-sm font-medium text-gray-700">
-                  Database ({selectedDatabases.filter(db => db.selected).length} selezionati)
+                <span className="text-sm font-medium text-slate-700">
+                  {selectedDatabases.filter(db => db.selected).length} selezionati
                 </span>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={selectAllDatabases}
-                    className="text-xs text-blue-600 hover:text-blue-700"
-                  >
-                    Seleziona Tutti
+                <div className="flex space-x-3">
+                  <button onClick={selectAllDatabases} className="text-xs font-medium text-primary-600 hover:text-primary-700">
+                    Seleziona tutti
                   </button>
-                  <button
-                    onClick={deselectAllDatabases}
-                    className="text-xs text-gray-600 hover:text-gray-700"
-                  >
-                    Deseleziona Tutti
+                  <button onClick={deselectAllDatabases} className="text-xs font-medium text-slate-500 hover:text-slate-700">
+                    Deseleziona
                   </button>
                 </div>
               </div>
               
-              <div className="space-y-2 max-h-60 overflow-y-auto">
+              <div className="space-y-1 max-h-60 overflow-y-auto">
                 {selectedDatabases.map((db, index) => (
                   <label
                     key={index}
-                    className="flex items-center space-x-3 p-2 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    className="flex items-center space-x-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
                   >
                     <input
                       type="checkbox"
                       checked={db.selected}
                       onChange={() => toggleDatabaseSelection(index)}
-                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-slate-300 rounded"
                     />
-                    <span className="text-sm text-gray-900">{db.name}</span>
+                    <span className="text-sm text-slate-900">{db.name}</span>
                   </label>
                 ))}
               </div>
             </div>
             
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-3">
               <button
                 onClick={() => {
                   setShowBackupDialog(false);
                   setSelectedConnection(null);
                   setSelectedDatabases([]);
                 }}
-                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="btn-secondary"
               >
                 Annulla
               </button>
               <button
                 onClick={executeSelectedBackups}
                 disabled={loading || selectedDatabases.filter(db => db.selected).length === 0}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                className="btn-primary"
               >
-                {loading ? 'Eseguendo...' : 'Esegui Backup'}
+                {loading ? 'Eseguendo...' : 'Esegui backup'}
               </button>
             </div>
           </div>
