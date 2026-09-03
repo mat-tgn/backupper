@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../api';
+import toast from 'react-hot-toast';
 import {
   Home,
   Database,
   Clock,
   FolderOpen,
   HardDrive,
+  Shield,
+  LogOut,
   X
 } from 'lucide-react';
 
@@ -15,11 +18,13 @@ const menuItems = [
   { path: '/connections', icon: Database, label: 'Connessioni', hint: 'Server MySQL' },
   { path: '/scheduled-backups', icon: Clock, label: 'Schedulazioni', hint: 'Backup automatici' },
   { path: '/backup-files', icon: FolderOpen, label: 'Archivio', hint: 'File salvati' },
+  { path: '/security', icon: Shield, label: 'Sicurezza', hint: 'Password di accesso' },
 ];
 
-const Sidebar = ({ open, onClose }) => {
+const Sidebar = ({ open, onClose, onLogout }) => {
   const location = useLocation();
   const [versionLabel, setVersionLabel] = useState(null);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   useEffect(() => {
     axios.get('/api/updates')
@@ -32,6 +37,19 @@ const Sidebar = ({ open, onClose }) => {
   useEffect(() => {
     onClose?.();
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await axios.post('/api/auth/logout');
+      toast.success('Disconnesso');
+      onLogout?.();
+    } catch (error) {
+      toast.error('Logout non riuscito');
+    } finally {
+      setLoggingOut(false);
+    }
+  };
 
   const nav = (
     <>
@@ -93,11 +111,22 @@ const Sidebar = ({ open, onClose }) => {
         </div>
       </nav>
 
-      {versionLabel && (
-        <div className="border-t border-white/10 px-5 py-4 text-xs text-slate-500">
-          Revisione <span className="font-mono text-slate-400">{versionLabel}</span>
-        </div>
-      )}
+      <div className="border-t border-white/10 px-3 py-4">
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-slate-300 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+        >
+          <LogOut className="h-5 w-5 text-slate-400" />
+          <span className="text-sm font-medium">{loggingOut ? 'Uscita…' : 'Esci'}</span>
+        </button>
+        {versionLabel && (
+          <div className="mt-3 px-3 text-xs text-slate-500">
+            Revisione <span className="font-mono text-slate-400">{versionLabel}</span>
+          </div>
+        )}
+      </div>
     </>
   );
 

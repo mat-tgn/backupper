@@ -5,12 +5,12 @@ Un'applicazione web moderna per gestire backup di database MySQL con interfaccia
 ## 🚀 Caratteristiche
 
 - **Interfaccia Web Moderna**: GUI React con design responsive
+- **Protezione con Password**: accesso obbligatorio (setup al primo avvio o via `APP_PASSWORD`)
 - **Gestione Connessioni**: Aggiungi e gestisci connessioni MySQL
 - **Backup Manuali**: Esegui backup on-demand
 - **Backup Schedulati**: Automatizza i backup con cron expressions
 - **Gestione File**: Visualizza, scarica ed elimina file di backup
 - **Container Docker**: Facile deployment con Docker Compose
-- **phpMyAdmin**: Interfaccia opzionale per gestione database
 
 ## 📋 Prerequisiti
 
@@ -36,6 +36,18 @@ Un'applicazione web moderna per gestire backup di database MySQL con interfaccia
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:3001
    - phpMyAdmin: http://localhost:8080
+
+4. **Imposta la password** al primo accesso (schermata di setup), oppure definisci `APP_PASSWORD` in `docker-compose.yml` prima del primo avvio.
+
+### Protezione con password
+
+L'accesso all'UI e alle API è **sempre protetto** da una password condivisa.
+
+- **Primo avvio senza env**: apri l'app e imposta una password (minimo 8 caratteri).
+- **Primo avvio con env**: imposta `APP_PASSWORD` (solo se non esiste già un hash in `backend/data/settings.json`). Dopo il seed, la password si cambia solo dalla UI (*Sicurezza*).
+- **Cambio password**: menu *Sicurezza* dopo il login.
+- **Logout**: pulsante *Esci* nella sidebar.
+- **Password dimenticata**: rimuovi il campo `passwordHash` da `backend/data/settings.json` e riavvia; oppure eliminalo e ridichiara `APP_PASSWORD` per un nuovo seed.
 
 ### Sviluppo Locale
 
@@ -105,12 +117,17 @@ Crea un file `.env` nella root del progetto:
 ```env
 NODE_ENV=production
 PORT=3001
+APP_PASSWORD=cambia-questa-password
+# COOKIE_SECURE=true
 MYSQL_HOST=mysql
 MYSQL_PORT=3306
 MYSQL_USER=backupper_user
 MYSQL_PASSWORD=backupper_pass
 MYSQL_DATABASE=test_db
 ```
+
+- `APP_PASSWORD`: usata **solo al primo avvio** per creare l'hash in `settings.json` se assente.
+- `COOKIE_SECURE=true`: abilita il flag Secure sul cookie di sessione (richiede HTTPS).
 
 ### Volumi Docker
 

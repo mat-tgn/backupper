@@ -8,7 +8,7 @@ import {
   Filter,
   X
 } from 'lucide-react';
-import axios from 'axios';
+import axios from '../api';
 import toast from 'react-hot-toast';
 import PageHeader from '../components/PageHeader';
 

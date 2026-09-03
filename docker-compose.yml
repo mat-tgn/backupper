@@ -17,6 +17,10 @@ services:
       - PORT=3001
       - GITHUB_REPO=mat-tgn/backupper
       - GIT_BRANCH=main
+      # Password iniziale (solo al primo avvio, se non esiste già in settings.json)
+      # - APP_PASSWORD=cambia-questa-password
+      # Cookie Secure (solo se servi l'app via HTTPS)
+      # - COOKIE_SECURE=true
     # depends_on:
     #   - mysql
     networks:

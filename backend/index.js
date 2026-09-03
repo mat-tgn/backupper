@@ -1,5 +1,8 @@
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const mysql = require('mysql2/promise');
 const cron = require('node-cron');
 const fs = require('fs-extra');
@@ -12,15 +15,23 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const SESSION_COOKIE = 'backupper_session';
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 giorni
+const MIN_PASSWORD_LENGTH = 8;
+const BCRYPT_ROUNDS = 12;
+
 // Middleware
-app.use(cors());
+app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
+app.use(cookieParser());
 
 // Storage per connessioni, backup schedulati e impostazioni
 let connections = [];
 let scheduledBackups = [];
 let settings = {
-  retentionDays: 0 // giorni di conservazione (0 = disabilitata)
+  retentionDays: 0, // giorni di conservazione (0 = disabilitata)
+  passwordHash: null,
+  sessionSecret: null
 };
 
 // Directory per i backup, dati e log
@@ -201,6 +212,121 @@ function saveSettings() {
   }
 }
 
+function publicSettings() {
+  return {
+    retentionDays: settings.retentionDays
+  };
+}
+
+function ensureSessionSecret() {
+  if (settings.sessionSecret && typeof settings.sessionSecret === 'string') {
+    return;
+  }
+  settings.sessionSecret = crypto.randomBytes(32).toString('hex');
+  saveSettings();
+}
+
+function isSetupRequired() {
+  return !settings.passwordHash;
+}
+
+function hashPassword(password) {
+  return bcrypt.hashSync(password, BCRYPT_ROUNDS);
+}
+
+function verifyPassword(password) {
+  if (!settings.passwordHash) {
+    return false;
+  }
+  return bcrypt.compareSync(password, settings.passwordHash);
+}
+
+function createSessionToken() {
+  const expiresAt = Date.now() + SESSION_MAX_AGE_MS;
+  const payload = String(expiresAt);
+  const signature = crypto
+    .createHmac('sha256', settings.sessionSecret)
+    .update(payload)
+    .digest('hex');
+  return `${payload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  if (!token || typeof token !== 'string' || !settings.sessionSecret) {
+    return false;
+  }
+  const [payload, signature] = token.split('.');
+  if (!payload || !signature) {
+    return false;
+  }
+  const expected = crypto
+    .createHmac('sha256', settings.sessionSecret)
+    .update(payload)
+    .digest('hex');
+  try {
+    const sigBuf = Buffer.from(signature, 'hex');
+    const expBuf = Buffer.from(expected, 'hex');
+    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  const expiresAt = Number(payload);
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+    return false;
+  }
+  return true;
+}
+
+function isAuthenticated(req) {
+  return verifySessionToken(req.cookies?.[SESSION_COOKIE]);
+}
+
+function cookieOptions(extra = {}) {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.COOKIE_SECURE === 'true',
+    path: '/',
+    ...extra
+  };
+}
+
+function setSessionCookie(res, token) {
+  res.cookie(SESSION_COOKIE, token, cookieOptions({
+    maxAge: SESSION_MAX_AGE_MS
+  }));
+}
+
+function clearSessionCookie(res) {
+  res.clearCookie(SESSION_COOKIE, cookieOptions());
+}
+
+function validatePasswordStrength(password) {
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    return `La password deve avere almeno ${MIN_PASSWORD_LENGTH} caratteri`;
+  }
+  return null;
+}
+
+function seedPasswordFromEnv() {
+  if (settings.passwordHash) {
+    return;
+  }
+  const envPassword = process.env.APP_PASSWORD;
+  if (!envPassword || typeof envPassword !== 'string' || !envPassword.trim()) {
+    return;
+  }
+  if (envPassword.length < MIN_PASSWORD_LENGTH) {
+    log('WARN', `APP_PASSWORD ignorata: minimo ${MIN_PASSWORD_LENGTH} caratteri`);
+    return;
+  }
+  settings.passwordHash = hashPassword(envPassword);
+  saveSettings();
+  log('INFO', 'Password inizializzata da APP_PASSWORD');
+}
+
 // Estrae la data di creazione di un file di backup
 function getBackupCreatedAt(file, stats) {
   const dateMatch = file.match(/(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)/);
@@ -331,6 +457,8 @@ function cleanupExpiredBackups() {
 
 // Carica i dati all'avvio (settings e connessioni prima, per migrare retention sui job)
 loadSettings();
+ensureSessionSecret();
+seedPasswordFromEnv();
 loadConnections();
 loadScheduledBackups();
 cleanupExpiredBackups();
@@ -340,7 +468,127 @@ cron.schedule('0 0 * * *', () => {
   cleanupExpiredBackups();
 });
 
-// API Routes
+// API Routes — autenticazione (pubbliche)
+app.get('/api/auth/status', (req, res) => {
+  res.json({
+    setupRequired: isSetupRequired(),
+    authenticated: !isSetupRequired() && isAuthenticated(req)
+  });
+});
+
+app.post('/api/auth/setup', (req, res) => {
+  try {
+    if (!isSetupRequired()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password già configurata'
+      });
+    }
+
+    const { password } = req.body || {};
+    const error = validatePasswordStrength(password);
+    if (error) {
+      return res.status(400).json({ success: false, message: error });
+    }
+
+    settings.passwordHash = hashPassword(password);
+    saveSettings();
+    setSessionCookie(res, createSessionToken());
+    log('INFO', 'Password impostata al primo avvio');
+
+    res.json({ success: true, authenticated: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/auth/login', (req, res) => {
+  try {
+    if (isSetupRequired()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Imposta prima una password'
+      });
+    }
+
+    const { password } = req.body || {};
+    if (typeof password !== 'string' || !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password richiesta'
+      });
+    }
+
+    if (!verifyPassword(password)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Password non corretta'
+      });
+    }
+
+    setSessionCookie(res, createSessionToken());
+    res.json({ success: true, authenticated: true });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearSessionCookie(res);
+  res.json({ success: true });
+});
+
+// Tutte le altre API richiedono autenticazione
+app.use('/api', (req, res, next) => {
+  if (isSetupRequired()) {
+    return res.status(401).json({
+      success: false,
+      message: 'Setup password richiesto',
+      setupRequired: true
+    });
+  }
+  if (!isAuthenticated(req)) {
+    return res.status(401).json({
+      success: false,
+      message: 'Non autenticato'
+    });
+  }
+  next();
+});
+
+app.put('/api/auth/password', (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body || {};
+
+    if (typeof currentPassword !== 'string' || !currentPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password attuale richiesta'
+      });
+    }
+
+    if (!verifyPassword(currentPassword)) {
+      return res.status(401).json({
+        success: false,
+        message: 'Password attuale non corretta'
+      });
+    }
+
+    const error = validatePasswordStrength(newPassword);
+    if (error) {
+      return res.status(400).json({ success: false, message: error });
+    }
+
+    settings.passwordHash = hashPassword(newPassword);
+    saveSettings();
+    setSessionCookie(res, createSessionToken());
+    log('INFO', 'Password aggiornata');
+
+    res.json({ success: true, message: 'Password aggiornata' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Test connessione MySQL
 app.post('/api/test-connection', async (req, res) => {
@@ -693,7 +941,7 @@ app.post('/api/updates/apply', async (req, res) => {
 
 // Impostazioni applicazione
 app.get('/api/settings', (req, res) => {
-  res.json(settings);
+  res.json(publicSettings());
 });
 
 app.put('/api/settings', (req, res) => {
@@ -716,7 +964,7 @@ app.put('/api/settings', (req, res) => {
 
     res.json({
       success: true,
-      settings,
+      settings: publicSettings(),
       deletedOnSave: cleanup.deleted
     });
   } catch (error) {
