@@ -10,6 +10,186 @@ import axios from '../api';
 import toast from 'react-hot-toast';
 import PageHeader from '../components/PageHeader';
 
+const CUSTOM_FIELD_VALUE = '__custom__';
+
+const CRON_FIELDS = [
+  {
+    key: 'minute',
+    label: 'Minuto',
+    hint: '0–59. Esempi: */15, 0,30',
+    presets: [
+      { value: '*', label: 'Ogni minuto' },
+      { value: '0', label: 'Al minuto 0' },
+      { value: '15', label: 'Al minuto 15' },
+      { value: '30', label: 'Al minuto 30' },
+      { value: '45', label: 'Al minuto 45' },
+      { value: '*/5', label: 'Ogni 5 minuti' },
+      { value: '*/15', label: 'Ogni 15 minuti' }
+    ]
+  },
+  {
+    key: 'hour',
+    label: 'Ora',
+    hint: '0–23. Esempi: */6, 8-18',
+    presets: [
+      { value: '*', label: 'Ogni ora' },
+      { value: '0', label: 'Mezzanotte (00)' },
+      { value: '2', label: 'Alle 02' },
+      { value: '6', label: 'Alle 06' },
+      { value: '8', label: 'Alle 08' },
+      { value: '12', label: 'Mezzogiorno (12)' },
+      { value: '18', label: 'Alle 18' },
+      { value: '22', label: 'Alle 22' },
+      { value: '*/6', label: 'Ogni 6 ore' }
+    ]
+  },
+  {
+    key: 'day',
+    label: 'Giorno del mese',
+    hint: '1–31. Esempi: 1,15 o 1-5',
+    presets: [
+      { value: '*', label: 'Ogni giorno' },
+      { value: '1', label: 'Il 1 del mese' },
+      { value: '15', label: 'Il 15 del mese' }
+    ]
+  },
+  {
+    key: 'month',
+    label: 'Mese',
+    hint: '1–12. Esempi: 1,7 o 1-3',
+    presets: [
+      { value: '*', label: 'Ogni mese' },
+      { value: '1', label: 'Gennaio' },
+      { value: '2', label: 'Febbraio' },
+      { value: '3', label: 'Marzo' },
+      { value: '4', label: 'Aprile' },
+      { value: '5', label: 'Maggio' },
+      { value: '6', label: 'Giugno' },
+      { value: '7', label: 'Luglio' },
+      { value: '8', label: 'Agosto' },
+      { value: '9', label: 'Settembre' },
+      { value: '10', label: 'Ottobre' },
+      { value: '11', label: 'Novembre' },
+      { value: '12', label: 'Dicembre' }
+    ]
+  },
+  {
+    key: 'dayOfWeek',
+    label: 'Giorno della settimana',
+    hint: '0 = domenica, 1 = lunedì. Esempi: 1-5',
+    presets: [
+      { value: '*', label: 'Ogni giorno' },
+      { value: '1-5', label: 'Dal lunedì al venerdì' },
+      { value: '0,6', label: 'Sabato e domenica' },
+      { value: '1', label: 'Lunedì' },
+      { value: '2', label: 'Martedì' },
+      { value: '3', label: 'Mercoledì' },
+      { value: '4', label: 'Giovedì' },
+      { value: '5', label: 'Venerdì' },
+      { value: '6', label: 'Sabato' },
+      { value: '0', label: 'Domenica' }
+    ]
+  }
+];
+
+const emptyCustomForm = {
+  minute: '*',
+  hour: '*',
+  day: '*',
+  month: '*',
+  dayOfWeek: '*'
+};
+
+const cronFromFields = (fields) =>
+  `${fields.minute} ${fields.hour} ${fields.day} ${fields.month} ${fields.dayOfWeek}`;
+
+const parseCronExpression = (cronExpr) => {
+  const parts = String(cronExpr || '').trim().split(/\s+/);
+  if (parts.length !== 5) {
+    return { ...emptyCustomForm };
+  }
+  return {
+    minute: parts[0],
+    hour: parts[1],
+    day: parts[2],
+    month: parts[3],
+    dayOfWeek: parts[4]
+  };
+};
+
+const cronFieldPresets = (field) =>
+  CRON_FIELDS.find((item) => item.key === field)?.presets.map((preset) => preset.value) || [];
+
+const openFieldsFromCron = (fields) => ({
+  minute: !cronFieldPresets('minute').includes(fields.minute),
+  hour: !cronFieldPresets('hour').includes(fields.hour),
+  day: !cronFieldPresets('day').includes(fields.day),
+  month: !cronFieldPresets('month').includes(fields.month),
+  dayOfWeek: !cronFieldPresets('dayOfWeek').includes(fields.dayOfWeek)
+});
+
+const CRON_PART_RE = /^(\*|\d+|\d+-\d+|\*\/\d+|(\d+(-\d+)?|\*\/\d+)(,(\d+(-\d+)?|\*\/\d+))*)$/;
+
+const isValidCronExpression = (expression) => {
+  const parts = String(expression || '').trim().split(/\s+/);
+  if (parts.length !== 5) {
+    return false;
+  }
+  return parts.every((part) => part && part !== CUSTOM_FIELD_VALUE && CRON_PART_RE.test(part));
+};
+
+const fieldSelectValue = (field, value) =>
+  cronFieldPresets(field).includes(value) ? value : CUSTOM_FIELD_VALUE;
+
+const describeCron = (expression) => {
+  const preset = scheduleOptions.find((option) => option.value === expression);
+  if (preset && preset.value !== 'custom') {
+    return preset.label;
+  }
+  if (!isValidCronExpression(expression)) {
+    return 'Espressione cron non valida';
+  }
+  const [minute, hour, day, month, dow] = expression.trim().split(/\s+/);
+  const parts = [];
+  if (minute.startsWith('*/')) {
+    parts.push(`ogni ${minute.slice(2)} minuti`);
+  } else if (minute === '*') {
+    parts.push('ogni minuto');
+  } else {
+    parts.push(`al minuto ${minute}`);
+  }
+  if (hour.startsWith('*/')) {
+    parts.push(`ogni ${hour.slice(2)} ore`);
+  } else if (hour !== '*') {
+    parts.push(`alle ore ${hour}`);
+  }
+  if (day !== '*') {
+    parts.push(`il giorno ${day} del mese`);
+  }
+  if (month !== '*') {
+    parts.push(`nel mese ${month}`);
+  }
+  if (dow === '1-5') {
+    parts.push('dal lunedì al venerdì');
+  } else if (dow === '0,6') {
+    parts.push('nel weekend');
+  } else if (dow !== '*') {
+    parts.push(`il giorno settimanale ${dow}`);
+  }
+  return parts.join(', ');
+};
+
+const scheduleOptions = [
+  { value: '0 0 * * *', label: 'Ogni giorno a mezzanotte' },
+  { value: '0 0 * * 0', label: 'Ogni domenica a mezzanotte' },
+  { value: '0 0 1 * *', label: 'Primo giorno del mese' },
+  { value: '0 */6 * * *', label: 'Ogni 6 ore' },
+  { value: '0 */12 * * *', label: 'Ogni 12 ore' },
+  { value: '0 2 * * *', label: 'Ogni giorno alle 2:00' },
+  { value: '0 0 * * 1', label: 'Ogni lunedì a mezzanotte' },
+  { value: 'custom', label: 'Personalizzato' }
+];
+
 const ScheduledBackups = () => {
   const [scheduledBackups, setScheduledBackups] = useState([]);
   const [connections, setConnections] = useState([]);
@@ -25,13 +205,6 @@ const ScheduledBackups = () => {
     retentionMode: 'days',
     retentionValue: 0
   };
-  const emptyCustomForm = {
-    minute: '*',
-    hour: '*',
-    day: '*',
-    month: '*',
-    dayOfWeek: '*'
-  };
   const [formData, setFormData] = useState(emptyForm);
   const [availableDatabases, setAvailableDatabases] = useState([]);
   const [customSchedule, setCustomSchedule] = useState('');
@@ -42,6 +215,13 @@ const ScheduledBackups = () => {
     day: '*',
     month: '*',
     dayOfWeek: '*'
+  });
+  const [customOpenFields, setCustomOpenFields] = useState({
+    minute: false,
+    hour: false,
+    day: false,
+    month: false,
+    dayOfWeek: false
   });
 
   useEffect(() => {
@@ -83,20 +263,30 @@ const ScheduledBackups = () => {
       });
     } else if (name === 'schedule') {
       if (value === 'custom') {
-        // Se seleziona personalizzato, mantieni il valore
+        const nextCustom = customSchedule || cronFromFields(emptyCustomForm);
         setFormData({
           ...formData,
           schedule: 'custom'
         });
         setShowCustomForm(true);
+        setCustomFormData(parseCronExpression(nextCustom));
+        setCustomSchedule(nextCustom);
+        setCustomOpenFields(openFieldsFromCron(parseCronExpression(nextCustom)));
       } else {
-        // Se seleziona un'opzione predefinita
         setFormData({
           ...formData,
           schedule: value
         });
-        setCustomSchedule(''); // Resetta il campo personalizzato
+        setCustomSchedule('');
         setShowCustomForm(false);
+        setCustomFormData(emptyCustomForm);
+        setCustomOpenFields({
+          minute: false,
+          hour: false,
+          day: false,
+          month: false,
+          dayOfWeek: false
+        });
       }
     } else {
       const nextValue = e.target.type === 'checkbox' ? e.target.checked : value;
@@ -133,10 +323,30 @@ const ScheduledBackups = () => {
       [field]: value
     };
     setCustomFormData(newFormData);
-    
-    // Genera l'espressione cron
-    const cronExpression = `${newFormData.minute} ${newFormData.hour} ${newFormData.day} ${newFormData.month} ${newFormData.dayOfWeek}`;
-    setCustomSchedule(cronExpression);
+    setCustomSchedule(cronFromFields(newFormData));
+  };
+
+  const handleCronFieldSelect = (field, selected) => {
+    if (selected === CUSTOM_FIELD_VALUE) {
+      setCustomOpenFields((prev) => ({ ...prev, [field]: true }));
+      const presets = cronFieldPresets(field);
+      if (presets.includes(customFormData[field])) {
+        handleCustomFormChange(field, '');
+      }
+      return;
+    }
+    setCustomOpenFields((prev) => ({ ...prev, [field]: false }));
+    handleCustomFormChange(field, selected);
+  };
+
+  const handleCronExpressionChange = (value) => {
+    setCustomSchedule(value);
+    const parts = String(value || '').trim().split(/\s+/);
+    if (parts.length === 5) {
+      const parsed = parseCronExpression(value);
+      setCustomFormData(parsed);
+      setCustomOpenFields(openFieldsFromCron(parsed));
+    }
   };
 
   const saveScheduledBackup = async () => {
@@ -149,7 +359,7 @@ const ScheduledBackups = () => {
         return;
       }
       
-      if (!formData.schedule || (formData.schedule === 'custom' && !customSchedule)) {
+      if (!formData.schedule || (formData.schedule === 'custom' && !isValidCronExpression(customSchedule))) {
         toast.error('Seleziona una schedulazione valida');
         return;
       }
@@ -227,31 +437,17 @@ const ScheduledBackups = () => {
     setCustomSchedule('');
     setShowCustomForm(false);
     setCustomFormData(emptyCustomForm);
+    setCustomOpenFields({
+      minute: false,
+      hour: false,
+      day: false,
+      month: false,
+      dayOfWeek: false
+    });
     setAvailableDatabases([]);
     setEditingBackup(null);
     setShowAddForm(false);
     setShowEditForm(false);
-  };
-
-  const parseCronExpression = (cronExpr) => {
-    const parts = String(cronExpr || '').trim().split(/\s+/);
-    if (parts.length !== 5) {
-      return emptyCustomForm;
-    }
-    return {
-      minute: parts[0],
-      hour: parts[1],
-      day: parts[2],
-      month: parts[3],
-      dayOfWeek: parts[4]
-    };
-  };
-
-  const extraCronOption = (value, knownValues) => {
-    if (!value || knownValues.includes(value)) {
-      return null;
-    }
-    return <option value={value}>{value}</option>;
   };
 
   const editScheduledBackup = (backup) => {
@@ -266,13 +462,22 @@ const ScheduledBackups = () => {
       retentionValue: backup.retentionValue ?? backup.retentionDays ?? 0
     });
     if (!isPreset) {
+      const parsed = parseCronExpression(backup.schedule);
       setShowCustomForm(true);
       setCustomSchedule(backup.schedule);
-      setCustomFormData(parseCronExpression(backup.schedule));
+      setCustomFormData(parsed);
+      setCustomOpenFields(openFieldsFromCron(parsed));
     } else {
       setShowCustomForm(false);
       setCustomSchedule('');
       setCustomFormData(emptyCustomForm);
+      setCustomOpenFields({
+        minute: false,
+        hour: false,
+        day: false,
+        month: false,
+        dayOfWeek: false
+      });
     }
     setShowAddForm(false);
     setShowEditForm(true);
@@ -286,7 +491,7 @@ const ScheduledBackups = () => {
     try {
       setLoading(true);
 
-      if (!formData.schedule || (formData.schedule === 'custom' && !customSchedule)) {
+      if (!formData.schedule || (formData.schedule === 'custom' && !isValidCronExpression(customSchedule))) {
         toast.error('Seleziona una schedulazione valida');
         return;
       }
@@ -337,17 +542,6 @@ const ScheduledBackups = () => {
     const connection = connections.find(c => c.id === connectionId);
     return connection ? connection.name : 'Connessione non trovata';
   };
-
-  const scheduleOptions = [
-    { value: '0 0 * * *', label: 'Ogni giorno a mezzanotte' },
-    { value: '0 0 * * 0', label: 'Ogni domenica a mezzanotte' },
-    { value: '0 0 1 * *', label: 'Primo giorno del mese' },
-    { value: '0 */6 * * *', label: 'Ogni 6 ore' },
-    { value: '0 */12 * * *', label: 'Ogni 12 ore' },
-    { value: '0 2 * * *', label: 'Ogni giorno alle 2:00' },
-    { value: '0 0 * * 1', label: 'Ogni lunedì a mezzanotte' },
-    { value: 'custom', label: 'Personalizzato' }
-  ];
 
   return (
     <div className="space-y-8">
@@ -491,122 +685,66 @@ const ScheduledBackups = () => {
               </select>
               {formData.schedule === 'custom' && showCustomForm && (
                 <div className="mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                  <h4 className="text-sm font-medium text-slate-700 mb-3">Schedulazione personalizzata</h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Minuti */}
-                    <div>
-                      <label className="field-label">Minuti</label>
-                      <select
-                        value={customFormData.minute}
-                        onChange={(e) => handleCustomFormChange('minute', e.target.value)}
-                        className="field-input"
-                      >
-                        <option value="*">Ogni minuto</option>
-                        <option value="0">Al minuto 0</option>
-                        <option value="15">Al minuto 15</option>
-                        <option value="30">Al minuto 30</option>
-                        <option value="45">Al minuto 45</option>
-                        {extraCronOption(customFormData.minute, ['*', '0', '15', '30', '45', 'custom'])}
-                        <option value="custom">Personalizzato</option>
-                      </select>
-                    </div>
-
-                    {/* Ore */}
-                    <div>
-                      <label className="field-label">Ore</label>
-                      <select
-                        value={customFormData.hour}
-                        onChange={(e) => handleCustomFormChange('hour', e.target.value)}
-                        className="field-input"
-                      >
-                        <option value="*">Ogni ora</option>
-                        <option value="0">A mezzanotte (00:00)</option>
-                        <option value="2">Alle 2:00</option>
-                        <option value="6">Alle 6:00</option>
-                        <option value="12">A mezzogiorno (12:00)</option>
-                        <option value="18">Alle 18:00</option>
-                        <option value="22">Alle 22:00</option>
-                        {extraCronOption(customFormData.hour, ['*', '0', '2', '6', '12', '18', '22', 'custom'])}
-                        <option value="custom">Personalizzato</option>
-                      </select>
-                    </div>
-
-                    {/* Giorni */}
-                    <div>
-                      <label className="field-label">Giorni del mese</label>
-                      <select
-                        value={customFormData.day}
-                        onChange={(e) => handleCustomFormChange('day', e.target.value)}
-                        className="field-input"
-                      >
-                        <option value="*">Ogni giorno</option>
-                        <option value="1">Il primo del mese</option>
-                        <option value="15">Il 15 del mese</option>
-                        {extraCronOption(customFormData.day, ['*', '1', '15', 'custom'])}
-                        <option value="custom">Personalizzato</option>
-                      </select>
-                    </div>
-
-                    {/* Mesi */}
-                    <div>
-                      <label className="field-label">Mesi</label>
-                      <select
-                        value={customFormData.month}
-                        onChange={(e) => handleCustomFormChange('month', e.target.value)}
-                        className="field-input"
-                      >
-                        <option value="*">Ogni mese</option>
-                        <option value="1">Gennaio</option>
-                        <option value="2">Febbraio</option>
-                        <option value="3">Marzo</option>
-                        <option value="4">Aprile</option>
-                        <option value="5">Maggio</option>
-                        <option value="6">Giugno</option>
-                        <option value="7">Luglio</option>
-                        <option value="8">Agosto</option>
-                        <option value="9">Settembre</option>
-                        <option value="10">Ottobre</option>
-                        <option value="11">Novembre</option>
-                        <option value="12">Dicembre</option>
-                        {extraCronOption(customFormData.month, ['*', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', 'custom'])}
-                        <option value="custom">Personalizzato</option>
-                      </select>
-                    </div>
-
-                    {/* Giorni della Settimana */}
-                    <div>
-                      <label className="field-label">Giorni della settimana</label>
-                      <select
-                        value={customFormData.dayOfWeek}
-                        onChange={(e) => handleCustomFormChange('dayOfWeek', e.target.value)}
-                        className="field-input"
-                      >
-                        <option value="*">Ogni giorno</option>
-                        <option value="1">Lunedì</option>
-                        <option value="2">Martedì</option>
-                        <option value="3">Mercoledì</option>
-                        <option value="4">Giovedì</option>
-                        <option value="5">Venerdì</option>
-                        <option value="6">Sabato</option>
-                        <option value="0">Domenica</option>
-                        {extraCronOption(customFormData.dayOfWeek, ['*', '1', '2', '3', '4', '5', '6', '0', 'custom'])}
-                        <option value="custom">Personalizzato</option>
-                      </select>
-                    </div>
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-slate-700">Schedulazione personalizzata</h4>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Scegli un valore predefinito oppure Personalizzato per scrivere il campo cron a mano.
+                    </p>
                   </div>
 
-                  {/* Espressione Cron Generata */}
-                  <div className="mt-4 rounded-lg border border-indigo-100 bg-indigo-50 p-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {CRON_FIELDS.map((field) => {
+                      const isCustom = customOpenFields[field.key] || !cronFieldPresets(field.key).includes(customFormData[field.key]);
+                      return (
+                        <div key={field.key}>
+                          <label className="field-label">{field.label}</label>
+                          <select
+                            value={fieldSelectValue(field.key, customFormData[field.key])}
+                            onChange={(e) => handleCronFieldSelect(field.key, e.target.value)}
+                            className="field-input"
+                          >
+                            {field.presets.map((preset) => (
+                              <option key={preset.value} value={preset.value}>
+                                {preset.label}
+                              </option>
+                            ))}
+                            <option value={CUSTOM_FIELD_VALUE}>Personalizzato…</option>
+                          </select>
+                          {isCustom && (
+                            <input
+                              type="text"
+                              value={customFormData[field.key]}
+                              onChange={(e) => handleCustomFormChange(field.key, e.target.value.trim())}
+                              className="field-input font-mono mt-2"
+                              placeholder={field.hint}
+                            />
+                          )}
+                          <p className="text-xs text-slate-500 mt-1.5">{field.hint}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className={`mt-4 rounded-lg border p-3 ${
+                    isValidCronExpression(customSchedule)
+                      ? 'border-indigo-100 bg-indigo-50'
+                      : 'border-rose-200 bg-rose-50'
+                  }`}>
                     <label className="field-label">Espressione cron</label>
                     <input
                       type="text"
                       value={customSchedule}
-                      readOnly
+                      onChange={(e) => handleCronExpressionChange(e.target.value)}
                       className="field-input font-mono"
+                      placeholder="min ora giorno mese giorno-settimana"
+                      spellCheck={false}
                     />
-                    <p className="text-xs text-slate-500 mt-1.5">
-                      Questa espressione verrà utilizzata per la schedulazione
+                    <p className={`text-xs mt-1.5 ${
+                      isValidCronExpression(customSchedule) ? 'text-slate-600' : 'text-rose-600'
+                    }`}>
+                      {isValidCronExpression(customSchedule)
+                        ? describeCron(customSchedule)
+                        : 'Inserisci 5 campi cron validi, ad esempio 0 */2 * * 1-5'}
                     </p>
                   </div>
                 </div>
@@ -671,7 +809,7 @@ const ScheduledBackups = () => {
             {showEditForm ? (
               <button
                 onClick={updateScheduledBackup}
-                disabled={loading || !formData.schedule || (formData.schedule === 'custom' && !customSchedule)}
+                disabled={loading || !formData.schedule || (formData.schedule === 'custom' && !isValidCronExpression(customSchedule))}
                 className="btn-primary"
               >
                 {loading ? 'Salvando...' : 'Aggiorna schedulazione'}
@@ -679,7 +817,7 @@ const ScheduledBackups = () => {
             ) : (
               <button
                 onClick={saveScheduledBackup}
-                disabled={loading || !formData.connectionId || availableDatabases.filter(db => db.selected).length === 0 || !formData.schedule || (formData.schedule === 'custom' && !customSchedule)}
+                disabled={loading || !formData.connectionId || availableDatabases.filter(db => db.selected).length === 0 || !formData.schedule || (formData.schedule === 'custom' && !isValidCronExpression(customSchedule))}
                 className="btn-primary"
               >
                 {loading ? 'Salvando...' : 'Salva schedulazione'}
@@ -723,7 +861,8 @@ const ScheduledBackups = () => {
                         </span>
                       </div>
                       <p className="text-sm text-slate-500 mt-1">Database: {backup.database}</p>
-                      <p className="text-sm text-slate-500 font-mono">Cron: {backup.schedule}</p>
+                      <p className="text-sm text-slate-500">{describeCron(backup.schedule)}</p>
+                      <p className="text-xs text-slate-400 font-mono">Cron: {backup.schedule}</p>
                       <p className="text-sm text-slate-500">
                         Conservazione:{' '}
                         {Number(backup.retentionValue ?? backup.retentionDays) > 0
