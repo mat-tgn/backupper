@@ -28,6 +28,7 @@ app.use(cookieParser());
 // Storage per connessioni, backup schedulati e impostazioni
 let connections = [];
 let scheduledBackups = [];
+const cronTasks = new Map();
 let settings = {
   retentionDays: 0, // giorni di conservazione (0 = disabilitata)
   passwordHash: null,
@@ -904,11 +905,83 @@ app.get('/api/scheduled-backups', (req, res) => {
   res.json(scheduledBackups);
 });
 
+// Aggiorna backup schedulato
+app.put('/api/scheduled-backups/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    const existing = scheduledBackups.find(backup => backup.id === id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Schedulazione non trovata' });
+    }
+
+    const {
+      schedule,
+      enabled,
+      retentionMode,
+      retentionValue,
+      retentionDays
+    } = req.body;
+
+    if (schedule !== undefined) {
+      if (typeof schedule !== 'string' || !cron.validate(schedule)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Espressione cron non valida'
+        });
+      }
+    }
+
+    if (retentionMode !== undefined && retentionMode !== 'days' && retentionMode !== 'count') {
+      return res.status(400).json({
+        success: false,
+        message: 'retentionMode deve essere "days" o "count"'
+      });
+    }
+
+    const incomingRetentionValue = retentionValue !== undefined ? retentionValue : retentionDays;
+    if (incomingRetentionValue !== undefined) {
+      const amount = Number(incomingRetentionValue);
+      if (!Number.isInteger(amount) || amount < 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Il valore di conservazione deve essere un intero >= 0 (0 = disabilitata)'
+        });
+      }
+    }
+
+    existing.schedule = schedule !== undefined ? schedule : existing.schedule;
+    existing.enabled = enabled !== undefined ? Boolean(enabled) : existing.enabled;
+    if (retentionMode !== undefined) {
+      existing.retentionMode = normalizeRetentionMode(retentionMode);
+    }
+    if (incomingRetentionValue !== undefined) {
+      existing.retentionValue = normalizeRetentionDays(incomingRetentionValue, 0);
+    }
+    existing.updatedAt = new Date().toISOString();
+
+    unscheduleBackup(id);
+    if (existing.enabled) {
+      scheduleBackup(existing);
+    }
+
+    saveScheduledBackups();
+    res.json({ success: true, scheduledBackup: existing });
+  } catch (error) {
+    console.error('Errore aggiornamento backup schedulato:', error);
+    res.status(400).json({ success: false, message: error.message });
+  }
+});
+
 // Elimina backup schedulato
 app.delete('/api/scheduled-backups/:id', (req, res) => {
   const { id } = req.params;
+  const exists = scheduledBackups.some(backup => backup.id === id);
+  if (!exists) {
+    return res.status(404).json({ success: false, message: 'Schedulazione non trovata' });
+  }
+  unscheduleBackup(id);
   scheduledBackups = scheduledBackups.filter(backup => backup.id !== id);
-  saveScheduledBackups(); // Salva automaticamente
+  saveScheduledBackups();
   res.json({ success: true });
 });
 
@@ -1023,6 +1096,14 @@ app.delete('/api/backups/:filename', (req, res) => {
   }
 });
 
+function unscheduleBackup(id) {
+  const task = cronTasks.get(id);
+  if (task) {
+    task.stop();
+    cronTasks.delete(id);
+  }
+}
+
 // Funzione per schedulare backup
 function scheduleBackup(scheduledBackup) {
   const connection = connections.find(c => c.id === scheduledBackup.connectionId);
@@ -1031,7 +1112,9 @@ function scheduleBackup(scheduledBackup) {
     return;
   }
 
-  cron.schedule(scheduledBackup.schedule, async () => {
+  unscheduleBackup(scheduledBackup.id);
+
+  const task = cron.schedule(scheduledBackup.schedule, async () => {
     try {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const backupFileName = `scheduled_backup_${scheduledBackup.id}_${scheduledBackup.connectionId}_${scheduledBackup.database}_${timestamp}.sql`;
@@ -1050,6 +1133,8 @@ function scheduleBackup(scheduledBackup) {
       log('ERROR', 'Errore backup schedulato', error.message);
     }
   });
+
+  cronTasks.set(scheduledBackup.id, task);
 
   log('INFO', 'Backup schedulato attivato', {
     id: scheduledBackup.id,
